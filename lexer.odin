@@ -80,7 +80,7 @@ LexerScanToken :: proc(Lexer : ^lexer) -> bool
 			}
 			else
 			{
-				ReportError(Lexer.CurrentLine, ": Unexpected character.")
+				ReportError(Lexer.CurrentLine, "Unexpected character")
 			}
 		}
 	}
@@ -191,7 +191,7 @@ LexerAddress :: proc(Lexer : ^lexer) -> (Err : bool)
 	}
 	else
 	{
-		ReportError(Lexer.CurrentLine, ": An absolute address must be either 1 or 2 bytes long")
+		ReportError(Lexer.CurrentLine, "An absolute address must be either 1 or 2 bytes long")
 		Err = true
 	}
 
@@ -205,7 +205,7 @@ LexerNumber :: proc(Lexer : ^lexer) -> (Err : bool)
 
 	if (c != '$')
 	{
-		ReportError(Lexer.CurrentLine, ": Syntax error, expected $.")
+		ReportError(Lexer.CurrentLine, "Syntax error, expected $")
 		Err = true
 	}
 	else
@@ -219,7 +219,7 @@ LexerNumber :: proc(Lexer : ^lexer) -> (Err : bool)
 
 		if (DigitsCounted != 2)
 		{
-			ReportError(Lexer.CurrentLine, ": A constant must be 1 byte long")
+			ReportError(Lexer.CurrentLine, "A constant must be 1 byte long")
 			Err = true
 		}
 		else

@@ -46,8 +46,6 @@ main :: proc()
 		OutputFileName = strings.concatenate([]string{OutputFileName, string(".o")})
 
 		OutputFileNameW = win32.utf8_to_wstring(OutputFileName)
-
-		fmt.println(OutputFileName)
 	}
 	else
 	{
@@ -88,7 +86,7 @@ main :: proc()
 	slice.sort_by(gErrors[:], SortErrors)
 	for Error in gErrors
 	{
-		fmt.printf("foo.asm(%d)", Error.LineNumber)
+		fmt.printf("%s(%d)", strings.clone_to_cstring(InputFileName), Error.LineNumber)
 		fmt.printf(" Error: ")
 		fmt.printf("%s\n", strings.clone_to_cstring(Error.Message))
 	}
