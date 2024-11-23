@@ -25,10 +25,18 @@ StringFile :: proc(FileName : string) -> [dynamic]string
 
 main :: proc()
 {
-	fmt.println("blah")
-
 	FileContents := StringFile("foo.asm")
-
 	fmt.println(FileContents)
+
+	Lexer : lexer
+
+	CreateLexer(&Lexer, FileContents)
+
+	LexerScanTokens(&Lexer)
+
+	for Token in Lexer.Tokens
+	{
+		fmt.println(Token)
+	}
 }
 
