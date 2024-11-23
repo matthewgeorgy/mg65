@@ -15,3 +15,8 @@ ReportError :: proc(LineNumber : int, Message : string)
 	append(&gErrors, Error)
 }
 
+SortErrors :: proc(A, B : error) -> bool
+{
+	return A.LineNumber < B.LineNumber
+}
+
