@@ -33,7 +33,29 @@ StringFile :: proc(FileName : string) -> [dynamic]string
 
 main :: proc()
 {
-	FileContents := StringFile("foo.asm")
+	Args := os.args
+	InputFileName : string
+	OutputFileName : string
+	OutputFileNameW : [^]u16
+
+	if len(Args) > 1
+	{
+		InputFileName = Args[1]
+
+		OutputFileName = strings.split(InputFileName, ".")[0]
+		OutputFileName = strings.concatenate([]string{OutputFileName, string(".o")})
+
+		OutputFileNameW = win32.utf8_to_wstring(OutputFileName)
+
+		fmt.println(OutputFileName)
+	}
+	else
+	{
+		fmt.println("No input file specified...!")
+		return
+	}
+
+	FileContents := StringFile(InputFileName)
 
 	Lexer : lexer
 
@@ -86,11 +108,11 @@ main :: proc()
 		hFile : win32.HANDLE
 		BytesWritten : win32.DWORD
 
-		hFile = win32.CreateFileW(win32.L("foo.o"), win32.GENERIC_WRITE, 0, nil, win32.CREATE_ALWAYS, win32.FILE_ATTRIBUTE_NORMAL, nil)
+		hFile = win32.CreateFileW(OutputFileNameW, win32.GENERIC_WRITE, 0, nil, win32.CREATE_ALWAYS, win32.FILE_ATTRIBUTE_NORMAL, nil)
 		win32.WriteFile(hFile, rawptr(&File.Data[0]), u32(File.Ptr), &BytesWritten, nil)
 		win32.CloseHandle(hFile)
 
-		fmt.println("Wrote", BytesWritten, "bytes to foo.o")
+		fmt.println("Wrote", BytesWritten, "bytes to", OutputFileName)
 	}
 }
 
