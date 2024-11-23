@@ -1,0 +1,6 @@
+LDA $4016
+TSX
+TSA
+BRK
+ADC
+
