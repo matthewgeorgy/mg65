@@ -38,5 +38,7 @@ main :: proc()
 	{
 		fmt.println(Token)
 	}
+
+	InitializeOpcodeTable(&gOpcodeTable)
 }
 
