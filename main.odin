@@ -4,6 +4,13 @@ import fmt		"core:fmt"
 import os		"core:os"
 import strings	"core:strings"
 import slice	"core:slice"
+import win32	"core:sys/windows"
+
+file :: struct
+{
+	Data : []u8,
+	Ptr : uint,
+}
 
 StringFile :: proc(FileName : string) -> [dynamic]string
 {
@@ -59,11 +66,31 @@ main :: proc()
 	slice.sort_by(gErrors[:], SortErrors)
 	for Error in gErrors
 	{
-		// fmt.println(Error.LineNumber, Error.Message)
-		// fmt.printf("foo.asm(%d) Error: %s\n", Error.LineNumber, strings.clone_to_cstring(Error.Message))
 		fmt.printf("foo.asm(%d)", Error.LineNumber)
 		fmt.printf(" Error: ")
 		fmt.printf("%s\n", strings.clone_to_cstring(Error.Message))
+	}
+
+	// Generate code
+	if len(gErrors) == 0
+	{
+		File : file
+		File.Data = make([]u8, 64000)
+
+		for LineNumber in LineNumbers
+		{
+			Tokens := TokenSet[LineNumber]
+			GenerateCode(Tokens[:], &File)
+		}
+
+		hFile : win32.HANDLE
+		BytesWritten : win32.DWORD
+
+		hFile = win32.CreateFileW(win32.L("foo.o"), win32.GENERIC_WRITE, 0, nil, win32.CREATE_ALWAYS, win32.FILE_ATTRIBUTE_NORMAL, nil)
+		win32.WriteFile(hFile, rawptr(&File.Data[0]), u32(File.Ptr), &BytesWritten, nil)
+		win32.CloseHandle(hFile)
+
+		fmt.println("Wrote", BytesWritten, "bytes to foo.o")
 	}
 }
 
@@ -105,10 +132,10 @@ ValidateTokens :: proc(Tokens : []token)
 		ReportError(CurrentLine, "This instruction does not support implicit mode")
 		return
 	}
-	
+
 	if TokenCount == 1 // Accumulator, Immediate, ZeroPage, Absolute
 	{
-		Arg := RemainingTokens[0] 
+		Arg := RemainingTokens[0]
 
 		if Arg.Type == token_type.NUMBER // Immediate
 		{
@@ -311,4 +338,126 @@ ValidateTokens :: proc(Tokens : []token)
 	}
 }
 
+GenerateCode :: proc(Tokens : []token, File : ^file)
+{
+	Opcode : opcode
+	CurrentLine := Tokens[0].LineNumber
+
+	Instruction := Tokens[0]
+	Opcode = gOpcodeTable[Instruction.Type]
+
+	if Opcode.Implicit != 0 || Instruction.Type == token_type.BRK
+	{
+		File.Data[File.Ptr] = Opcode.Implicit
+
+		File.Ptr += 1
+		return
+	}
+
+	TokenCount := len(Tokens[1:])
+
+	if TokenCount == 1
+	{
+		Arg := Tokens[1]
+
+		if Arg.Type == token_type.NUMBER // Immediate
+		{
+			File.Data[File.Ptr] = Opcode.Immediate
+			File.Data[File.Ptr + 1] = Arg.Literal.(u8)
+			File.Ptr += 2
+
+			return
+		}
+		else if Arg.Type == token_type.ADDRESS8 // ZeroPage
+		{
+			File.Data[File.Ptr] = Opcode.ZeroPage
+			File.Data[File.Ptr + 1] = Arg.Literal.(u8)
+			File.Ptr += 2
+
+			return
+		}
+		else if Arg.Type == token_type.ADDRESS16 // Absolute
+		{
+			File.Data[File.Ptr] = Opcode.Absolute
+			File.Data[File.Ptr + 1] = u8(0x00FF & Arg.Literal.(u16)) // lo-byte
+			File.Data[File.Ptr + 2] = u8((0xFF00 & Arg.Literal.(u16)) >> 8) // hi-byte
+			File.Ptr += 3
+
+			return
+		}
+		else
+		{
+			File.Data[File.Ptr] = Opcode.Accumulator
+			File.Ptr += 1
+
+			return
+		}
+	}
+	else if TokenCount == 3
+	{
+		Args := Tokens[1:]
+
+		if Args[0].Type == token_type.ADDRESS8 // ZeroPageX, ZeroPageY
+		{
+			if (Args[2].Lexeme == "X" || Args[2].Lexeme == "x")
+			{
+				File.Data[File.Ptr] = Opcode.ZeroPageX
+			}
+			else if (Args[2].Lexeme == "Y" || Args[2].Lexeme == "y")
+			{
+				File.Data[File.Ptr] = Opcode.ZeroPageY
+			}
+			File.Data[File.Ptr + 1] = Args[2].Literal.(u8)
+			File.Ptr += 2
+
+			return
+		}
+		else if Args[0].Type == token_type.ADDRESS16 // AbsoluteX, AbsoluteY
+		{
+			if (Args[2].Lexeme == "X" || Args[2].Lexeme == "x")
+			{
+				File.Data[File.Ptr] = Opcode.AbsoluteX
+			}
+			else if (Args[2].Lexeme == "Y" || Args[2].Lexeme == "y")
+			{
+				File.Data[File.Ptr] = Opcode.AbsoluteY
+			}
+			File.Data[File.Ptr + 1] = u8(0x00FF & Args[0].Literal.(u16)) // lo-byte
+			File.Data[File.Ptr + 2] = u8((0xFF00 & Args[0].Literal.(u16)) >> 8) // hi-byte
+			File.Ptr += 3
+
+			return
+		}
+		else if Args[0].Type == token_type.LEFT_PAREN // Indirect
+		{
+			File.Data[File.Ptr] = Opcode.Indirect
+			File.Data[File.Ptr + 1] = u8(0x00FF & Args[1].Literal.(u16)) // lo-byte
+			File.Data[File.Ptr + 2] = u8((0xFF00 & Args[1].Literal.(u16)) >> 8) // hi-byte
+			File.Ptr += 3
+
+			return
+		}
+	}
+	else if TokenCount == 5
+	{
+		Args := Tokens[1:]
+
+		if Args[2].Type == token_type.COMMA // IndirectX
+		{
+			File.Data[File.Ptr] = Opcode.IndirectX
+			File.Data[File.Ptr + 1] = Args[1].Literal.(u8)
+			File.Ptr += 2
+
+			return
+		}
+		else if Args[2].Type == token_type.RIGHT_PAREN // IndirectY
+		{
+			File.Data[File.Ptr] = Opcode.IndirectY
+			File.Data[File.Ptr + 1] = Args[1].Literal.(u8)
+			File.Ptr += 2
+
+			return
+		}
+	}
+}
 
