@@ -42,10 +42,13 @@ main :: proc()
 	{
 		InputFileName = Args[1]
 
-		OutputFileName = strings.split(InputFileName, ".")[0]
+		Temp := strings.split(InputFileName, "\\")
+		OutputFileName = strings.split(Temp[len(Temp) - 1], ".")[0]
 		OutputFileName = strings.concatenate([]string{OutputFileName, string(".o")})
 
 		OutputFileNameW = win32.utf8_to_wstring(OutputFileName)
+
+		fmt.println(OutputFileName)
 	}
 	else
 	{
@@ -427,7 +430,7 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 			{
 				File.Data[File.Ptr] = Opcode.ZeroPageY
 			}
-			File.Data[File.Ptr + 1] = Args[2].Literal.(u8)
+			File.Data[File.Ptr + 1] = Args[0].Literal.(u8)
 			File.Ptr += 2
 
 			return

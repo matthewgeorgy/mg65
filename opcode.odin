@@ -23,7 +23,7 @@ gOpcodeTable : map[token_type]opcode
 
 InitializeOpcodeTable :: proc(Table : ^map[token_type]opcode)
 {
-	Table[token_type.ADC] = opcode{Immediate = 0x69, ZeroPage = 0x44, ZeroPageX = 0x75, Absolute = 0x6D, AbsoluteX = 0x7D, AbsoluteY = 0x79, IndirectX = 0x61, IndirectY = 0x71}
+	Table[token_type.ADC] = opcode{Immediate = 0x69, ZeroPage = 0x65, ZeroPageX = 0x75, Absolute = 0x6D, AbsoluteX = 0x7D, AbsoluteY = 0x79, IndirectX = 0x61, IndirectY = 0x71}
 	Table[token_type.AND] = opcode{Immediate = 0x29, ZeroPage = 0x25, ZeroPageX = 0x35, Absolute  = 0x2D, AbsoluteX = 0x3D, AbsoluteY = 0x39, IndirectX = 0x21, IndirectY = 0x31}
 	Table[token_type.ASL] = opcode{Accumulator = 0x0A, ZeroPage = 0x06, ZeroPageX = 0x16, Absolute = 0x0E, AbsoluteX = 0x1E}
 	Table[token_type.BIT] = opcode{ZeroPage = 0x24, Absolute = 0x2C}
