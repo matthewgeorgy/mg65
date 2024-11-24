@@ -1,0 +1,3 @@
+STY $50
+STY $5C,X
+STY $9A9B
