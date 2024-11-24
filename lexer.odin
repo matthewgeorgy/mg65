@@ -211,7 +211,7 @@ LexerNumber :: proc(Lexer : ^lexer) -> (Err : bool)
 	else
 	{
 		DigitsCounted := 0
-		for LexerIsDigit(LexerPeek(Lexer))
+		for LexerIsHex(LexerPeek(Lexer))
 		{
 			LexerAdvance(Lexer)
 			DigitsCounted += 1

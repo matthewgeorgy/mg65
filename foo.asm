@@ -1,5 +1,1 @@
-LDA $4016
-TSX
-TAY
-BRK
-
+ADC #$4A
