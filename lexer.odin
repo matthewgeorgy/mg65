@@ -175,7 +175,7 @@ LexerPeek :: proc(Lexer : ^lexer) -> u8
 LexerAddress :: proc(Lexer : ^lexer) -> (Err : bool)
 {
 	DigitsCounted := 0
-	for LexerIsDigit(LexerPeek(Lexer))
+	for LexerIsHex(LexerPeek(Lexer))
 	{
 		LexerAdvance(Lexer)
 		DigitsCounted += 1
@@ -232,6 +232,10 @@ LexerNumber :: proc(Lexer : ^lexer) -> (Err : bool)
 	return
 }
 
+LexerIsHex :: proc(C : u8) -> bool
+{
+	return (LexerIsDigit(C) || ('A' <= C  && C <= 'F') || ('a' <= C  && C <= 'f'))
+}
 
 LexerIsAlphaNumeric :: proc(C : u8) -> bool
 {
