@@ -59,6 +59,12 @@ LexerScanToken :: proc(Lexer : ^lexer) -> bool
 		case ')' : { LexerAddToken(Lexer, token_type.RIGHT_PAREN) }
 		case ',' : { LexerAddToken(Lexer, token_type.COMMA) }
 
+		case ';' :
+		{
+			// NOTE(matthew): not actually an error, just to break out of comment
+			Err = true
+		}
+
 		case ' ' :
 		case '\t' :
 
