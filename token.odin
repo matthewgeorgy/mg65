@@ -6,7 +6,10 @@ token_type :: enum
 	LEFT_PAREN, RIGHT_PAREN, COMMA,
 
 	// Literals
-	IDENTIFIER, STIRNG, NUMBER, ADDRESS8, ADDRESS16,
+	IDENTIFIER, STIRNG, NUMBER8, NUMBER16, ADDRESS8, ADDRESS16,
+
+	// Directives
+	BYTE, WORD,
 
 	// Opcodes
 	ADC, AND, ASL, BCC, BCS, BEQ, BIT, BMI, BNE, BPL, BRK, BVC, BVS, CLC,
@@ -16,7 +19,6 @@ token_type :: enum
 
 	EOF
 }
-
 
 token :: struct
 {

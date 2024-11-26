@@ -128,9 +128,29 @@ ValidateTokens :: proc(Tokens : []token)
 	{
 		Opcode = gOpcodeTable[Instruction.Type]
 	}
+	else if Instruction.Type == token_type.BYTE || Instruction.Type == token_type.WORD
+	{
+		if len(Tokens[1:]) == 1
+		{
+			// Param := Tokens[1]
+
+			// if Param.Type == token_type.NUMBER
+			// {
+
+			// }
+			// else
+			// {
+			// 	ReportError(CurrentLine, "Directive must take a constant") 
+			// }
+		}
+		else
+		{
+			ReportError(CurrentLine, "Wrong number of arguments for a directive")
+		}
+	}
 	else
 	{
-		ReportError(CurrentLine, "Code must start with an instruction")
+		ReportError(CurrentLine, "Code must start with an instruction or directive")
 		return
 	}
 
@@ -160,7 +180,7 @@ ValidateTokens :: proc(Tokens : []token)
 	{
 		Arg := RemainingTokens[0]
 
-		if Arg.Type == token_type.NUMBER // Immediate
+		if Arg.Type == token_type.NUMBER8 // Immediate
 		{
 			if Opcode.Immediate == 0
 			{
@@ -383,7 +403,7 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 	{
 		Arg := Tokens[1]
 
-		if Arg.Type == token_type.NUMBER // Immediate
+		if Arg.Type == token_type.NUMBER8 // Immediate
 		{
 			File.Data[File.Ptr] = Opcode.Immediate
 			File.Data[File.Ptr + 1] = Arg.Literal.(u8)

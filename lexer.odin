@@ -13,7 +13,7 @@ lexer :: struct
 	CurrentLine : int,
 	Tokens : [dynamic]token,
 
-	Opcodes : map[string]token_type
+	Keywords : map[string]token_type
 }
 
 CreateLexer :: proc(Lexer : ^lexer, Lines : [dynamic]string)
@@ -23,7 +23,7 @@ CreateLexer :: proc(Lexer : ^lexer, Lines : [dynamic]string)
 	Lexer.CurrentPos = 0
 	Lexer.CurrentLine = 1
 
-	LexerInitializeOpcodeTable(Lexer)
+	LexerInitializeKeywordTable(Lexer)
 }
 
 LexerScanTokens :: proc(Lexer : ^lexer)
@@ -78,6 +78,11 @@ LexerScanToken :: proc(Lexer : ^lexer) -> bool
 			Err = LexerAddress(Lexer)
 		}
 
+		case '.':
+		{
+			Err = LexerDirective(Lexer)
+		}
+
 		case:
 		{
 			if (LexerIsAlpha(c))
@@ -99,10 +104,16 @@ LexerAddToken :: proc(Lexer : ^lexer, Type : token_type)
 	Token : token
 	Text := Lexer.Source[Lexer.StartPos : Lexer.CurrentPos]
 
-	if (Type == token_type.NUMBER)
+	if (Type == token_type.NUMBER8)
 	{
 		StringValue := strings.clone_to_cstring(Text[2:])
 		Literal := u8(libc.strtol(StringValue, nil, 16))
+		Token = token{ Type, Text, Literal, Lexer.CurrentLine}
+	}
+	else if (Type == token_type.NUMBER16)
+	{
+		StringValue := strings.clone_to_cstring(Text[2:])
+		Literal := u16(libc.strtol(StringValue, nil, 16))
 		Token = token{ Type, Text, Literal, Lexer.CurrentLine}
 	}
 	else if (Type == token_type.ADDRESS8)
@@ -223,15 +234,18 @@ LexerNumber :: proc(Lexer : ^lexer) -> (Err : bool)
 			DigitsCounted += 1
 		}
 
-		if (DigitsCounted != 2)
+		if DigitsCounted == 2
 		{
-			ReportError(Lexer.CurrentLine, "A constant must be 1 byte long")
-			Err = true
+			LexerAddToken(Lexer, token_type.NUMBER8)
+		}
+		else if DigitsCounted == 4
+		{
+			LexerAddToken(Lexer, token_type.NUMBER16)
 		}
 		else
 		{
-			// Lexer.Start += 2
-			LexerAddToken(Lexer, token_type.NUMBER)
+			ReportError(Lexer.CurrentLine, "A constant must be 1 or 2 byte(s) long")
+			Err = true
 		}
 	}
 
@@ -248,6 +262,26 @@ LexerIsAlphaNumeric :: proc(C : u8) -> bool
 	return (LexerIsAlpha(C) || LexerIsDigit(C))
 }
 
+LexerDirective :: proc(Lexer : ^lexer) -> (Err : bool)
+{
+	for LexerIsAlpha(LexerPeek(Lexer))
+	{
+		LexerAdvance(Lexer)
+	}
+
+	Text := Lexer.Source[Lexer.StartPos + 1 : Lexer.CurrentPos]
+	Type, Exists := Lexer.Keywords[Text]
+	if !Exists
+	{
+		ReportError(Lexer.CurrentLine, "Unrecognized directive")
+		Err = true
+	}
+
+	LexerAddToken(Lexer, Type)
+
+	return
+}
+
 LexerIdentifier :: proc(Lexer : ^lexer)
 {
 	for (LexerIsAlphaNumeric(LexerPeek(Lexer)))
@@ -256,7 +290,7 @@ LexerIdentifier :: proc(Lexer : ^lexer)
 	}
 
 	Text := Lexer.Source[Lexer.StartPos : Lexer.CurrentPos]
-	Type, Exists := Lexer.Opcodes[Text]
+	Type, Exists := Lexer.Keywords[Text]
 	if !Exists
 	{
 		Type = token_type.IDENTIFIER
@@ -265,121 +299,125 @@ LexerIdentifier :: proc(Lexer : ^lexer)
 	LexerAddToken(Lexer, Type)
 }
 
-LexerInitializeOpcodeTable :: proc(Lexer : ^lexer)
+LexerInitializeKeywordTable :: proc(Lexer : ^lexer)
 {
-	Lexer.Opcodes["ADC"] = token_type.ADC
-	Lexer.Opcodes["AND"] = token_type.AND
-	Lexer.Opcodes["ASL"] = token_type.ASL
-	Lexer.Opcodes["BCC"] = token_type.BCC
-	Lexer.Opcodes["BCS"] = token_type.BCS
-	Lexer.Opcodes["BEQ"] = token_type.BEQ
-	Lexer.Opcodes["BIT"] = token_type.BIT
-	Lexer.Opcodes["BMI"] = token_type.BMI
-	Lexer.Opcodes["BNE"] = token_type.BNE
-	Lexer.Opcodes["BPL"] = token_type.BPL
-	Lexer.Opcodes["BRK"] = token_type.BRK
-	Lexer.Opcodes["BVC"] = token_type.BVC
-	Lexer.Opcodes["BVS"] = token_type.BVS
-	Lexer.Opcodes["CLC"] = token_type.CLC
-	Lexer.Opcodes["CLD"] = token_type.CLD
-	Lexer.Opcodes["CLI"] = token_type.CLI
-	Lexer.Opcodes["CLV"] = token_type.CLV
-	Lexer.Opcodes["CMP"] = token_type.CMP
-	Lexer.Opcodes["CPX"] = token_type.CPX
-	Lexer.Opcodes["CPY"] = token_type.CPY
-	Lexer.Opcodes["DEC"] = token_type.DEC
-	Lexer.Opcodes["DEX"] = token_type.DEX
-	Lexer.Opcodes["DEY"] = token_type.DEY
-	Lexer.Opcodes["EOR"] = token_type.EOR
-	Lexer.Opcodes["INC"] = token_type.INC
-	Lexer.Opcodes["INX"] = token_type.INX
-	Lexer.Opcodes["INY"] = token_type.INY
-	Lexer.Opcodes["JMP"] = token_type.JMP
-	Lexer.Opcodes["JSR"] = token_type.JSR
-	Lexer.Opcodes["LDA"] = token_type.LDA
-	Lexer.Opcodes["LDX"] = token_type.LDX
-	Lexer.Opcodes["LDY"] = token_type.LDY
-	Lexer.Opcodes["LSR"] = token_type.LSR
-	Lexer.Opcodes["NOP"] = token_type.NOP
-	Lexer.Opcodes["ORA"] = token_type.ORA
-	Lexer.Opcodes["PHA"] = token_type.PHA
-	Lexer.Opcodes["PHP"] = token_type.PHP
-	Lexer.Opcodes["PLA"] = token_type.PLA
-	Lexer.Opcodes["PLP"] = token_type.PLP
-	Lexer.Opcodes["ROL"] = token_type.ROL
-	Lexer.Opcodes["ROR"] = token_type.ROR
-	Lexer.Opcodes["RTI"] = token_type.RTI
-	Lexer.Opcodes["RTS"] = token_type.RTS
-	Lexer.Opcodes["SBC"] = token_type.SBC
-	Lexer.Opcodes["SEC"] = token_type.SEC
-	Lexer.Opcodes["SED"] = token_type.SED
-	Lexer.Opcodes["SEI"] = token_type.SEI
-	Lexer.Opcodes["STA"] = token_type.STA
-	Lexer.Opcodes["STX"] = token_type.STX
-	Lexer.Opcodes["STY"] = token_type.STY
-	Lexer.Opcodes["TAX"] = token_type.TAX
-	Lexer.Opcodes["TAY"] = token_type.TAY
-	Lexer.Opcodes["TSX"] = token_type.TSX
-	Lexer.Opcodes["TXA"] = token_type.TXA
-	Lexer.Opcodes["TXS"] = token_type.TXS
-	Lexer.Opcodes["TYA"] = token_type.TYA
+	Lexer.Keywords["ADC"] = token_type.ADC
+	Lexer.Keywords["AND"] = token_type.AND
+	Lexer.Keywords["ASL"] = token_type.ASL
+	Lexer.Keywords["BCC"] = token_type.BCC
+	Lexer.Keywords["BCS"] = token_type.BCS
+	Lexer.Keywords["BEQ"] = token_type.BEQ
+	Lexer.Keywords["BIT"] = token_type.BIT
+	Lexer.Keywords["BMI"] = token_type.BMI
+	Lexer.Keywords["BNE"] = token_type.BNE
+	Lexer.Keywords["BPL"] = token_type.BPL
+	Lexer.Keywords["BRK"] = token_type.BRK
+	Lexer.Keywords["BVC"] = token_type.BVC
+	Lexer.Keywords["BVS"] = token_type.BVS
+	Lexer.Keywords["CLC"] = token_type.CLC
+	Lexer.Keywords["CLD"] = token_type.CLD
+	Lexer.Keywords["CLI"] = token_type.CLI
+	Lexer.Keywords["CLV"] = token_type.CLV
+	Lexer.Keywords["CMP"] = token_type.CMP
+	Lexer.Keywords["CPX"] = token_type.CPX
+	Lexer.Keywords["CPY"] = token_type.CPY
+	Lexer.Keywords["DEC"] = token_type.DEC
+	Lexer.Keywords["DEX"] = token_type.DEX
+	Lexer.Keywords["DEY"] = token_type.DEY
+	Lexer.Keywords["EOR"] = token_type.EOR
+	Lexer.Keywords["INC"] = token_type.INC
+	Lexer.Keywords["INX"] = token_type.INX
+	Lexer.Keywords["INY"] = token_type.INY
+	Lexer.Keywords["JMP"] = token_type.JMP
+	Lexer.Keywords["JSR"] = token_type.JSR
+	Lexer.Keywords["LDA"] = token_type.LDA
+	Lexer.Keywords["LDX"] = token_type.LDX
+	Lexer.Keywords["LDY"] = token_type.LDY
+	Lexer.Keywords["LSR"] = token_type.LSR
+	Lexer.Keywords["NOP"] = token_type.NOP
+	Lexer.Keywords["ORA"] = token_type.ORA
+	Lexer.Keywords["PHA"] = token_type.PHA
+	Lexer.Keywords["PHP"] = token_type.PHP
+	Lexer.Keywords["PLA"] = token_type.PLA
+	Lexer.Keywords["PLP"] = token_type.PLP
+	Lexer.Keywords["ROL"] = token_type.ROL
+	Lexer.Keywords["ROR"] = token_type.ROR
+	Lexer.Keywords["RTI"] = token_type.RTI
+	Lexer.Keywords["RTS"] = token_type.RTS
+	Lexer.Keywords["SBC"] = token_type.SBC
+	Lexer.Keywords["SEC"] = token_type.SEC
+	Lexer.Keywords["SED"] = token_type.SED
+	Lexer.Keywords["SEI"] = token_type.SEI
+	Lexer.Keywords["STA"] = token_type.STA
+	Lexer.Keywords["STX"] = token_type.STX
+	Lexer.Keywords["STY"] = token_type.STY
+	Lexer.Keywords["TAX"] = token_type.TAX
+	Lexer.Keywords["TAY"] = token_type.TAY
+	Lexer.Keywords["TSX"] = token_type.TSX
+	Lexer.Keywords["TXA"] = token_type.TXA
+	Lexer.Keywords["TXS"] = token_type.TXS
+	Lexer.Keywords["TYA"] = token_type.TYA
+	Lexer.Keywords["BYTE"] = token_type.BYTE
+	Lexer.Keywords["WORD"] = token_type.WORD
 
-	Lexer.Opcodes["adc"] = token_type.ADC
-	Lexer.Opcodes["and"] = token_type.AND
-	Lexer.Opcodes["asl"] = token_type.ASL
-	Lexer.Opcodes["bcc"] = token_type.BCC
-	Lexer.Opcodes["bcs"] = token_type.BCS
-	Lexer.Opcodes["beq"] = token_type.BEQ
-	Lexer.Opcodes["bit"] = token_type.BIT
-	Lexer.Opcodes["bmi"] = token_type.BMI
-	Lexer.Opcodes["bne"] = token_type.BNE
-	Lexer.Opcodes["bpl"] = token_type.BPL
-	Lexer.Opcodes["brk"] = token_type.BRK
-	Lexer.Opcodes["bvc"] = token_type.BVC
-	Lexer.Opcodes["bvs"] = token_type.BVS
-	Lexer.Opcodes["clc"] = token_type.CLC
-	Lexer.Opcodes["cld"] = token_type.CLD
-	Lexer.Opcodes["cli"] = token_type.CLI
-	Lexer.Opcodes["clv"] = token_type.CLV
-	Lexer.Opcodes["cmp"] = token_type.CMP
-	Lexer.Opcodes["cpx"] = token_type.CPX
-	Lexer.Opcodes["cpy"] = token_type.CPY
-	Lexer.Opcodes["dec"] = token_type.DEC
-	Lexer.Opcodes["dex"] = token_type.DEX
-	Lexer.Opcodes["dey"] = token_type.DEY
-	Lexer.Opcodes["eor"] = token_type.EOR
-	Lexer.Opcodes["inc"] = token_type.INC
-	Lexer.Opcodes["inx"] = token_type.INX
-	Lexer.Opcodes["iny"] = token_type.INY
-	Lexer.Opcodes["jmp"] = token_type.JMP
-	Lexer.Opcodes["jsr"] = token_type.JSR
-	Lexer.Opcodes["lda"] = token_type.LDA
-	Lexer.Opcodes["ldx"] = token_type.LDX
-	Lexer.Opcodes["ldy"] = token_type.LDY
-	Lexer.Opcodes["lsr"] = token_type.LSR
-	Lexer.Opcodes["nop"] = token_type.NOP
-	Lexer.Opcodes["ora"] = token_type.ORA
-	Lexer.Opcodes["pha"] = token_type.PHA
-	Lexer.Opcodes["php"] = token_type.PHP
-	Lexer.Opcodes["pla"] = token_type.PLA
-	Lexer.Opcodes["plp"] = token_type.PLP
-	Lexer.Opcodes["rol"] = token_type.ROL
-	Lexer.Opcodes["ror"] = token_type.ROR
-	Lexer.Opcodes["rti"] = token_type.RTI
-	Lexer.Opcodes["rts"] = token_type.RTS
-	Lexer.Opcodes["sbc"] = token_type.SBC
-	Lexer.Opcodes["sec"] = token_type.SEC
-	Lexer.Opcodes["sed"] = token_type.SED
-	Lexer.Opcodes["sei"] = token_type.SEI
-	Lexer.Opcodes["sta"] = token_type.STA
-	Lexer.Opcodes["stx"] = token_type.STX
-	Lexer.Opcodes["sty"] = token_type.STY
-	Lexer.Opcodes["tax"] = token_type.TAX
-	Lexer.Opcodes["tay"] = token_type.TAY
-	Lexer.Opcodes["tsx"] = token_type.TSX
-	Lexer.Opcodes["txa"] = token_type.TXA
-	Lexer.Opcodes["txs"] = token_type.TXS
-	Lexer.Opcodes["tya"] = token_type.TYA
+	Lexer.Keywords["adc"] = token_type.ADC
+	Lexer.Keywords["and"] = token_type.AND
+	Lexer.Keywords["asl"] = token_type.ASL
+	Lexer.Keywords["bcc"] = token_type.BCC
+	Lexer.Keywords["bcs"] = token_type.BCS
+	Lexer.Keywords["beq"] = token_type.BEQ
+	Lexer.Keywords["bit"] = token_type.BIT
+	Lexer.Keywords["bmi"] = token_type.BMI
+	Lexer.Keywords["bne"] = token_type.BNE
+	Lexer.Keywords["bpl"] = token_type.BPL
+	Lexer.Keywords["brk"] = token_type.BRK
+	Lexer.Keywords["bvc"] = token_type.BVC
+	Lexer.Keywords["bvs"] = token_type.BVS
+	Lexer.Keywords["clc"] = token_type.CLC
+	Lexer.Keywords["cld"] = token_type.CLD
+	Lexer.Keywords["cli"] = token_type.CLI
+	Lexer.Keywords["clv"] = token_type.CLV
+	Lexer.Keywords["cmp"] = token_type.CMP
+	Lexer.Keywords["cpx"] = token_type.CPX
+	Lexer.Keywords["cpy"] = token_type.CPY
+	Lexer.Keywords["dec"] = token_type.DEC
+	Lexer.Keywords["dex"] = token_type.DEX
+	Lexer.Keywords["dey"] = token_type.DEY
+	Lexer.Keywords["eor"] = token_type.EOR
+	Lexer.Keywords["inc"] = token_type.INC
+	Lexer.Keywords["inx"] = token_type.INX
+	Lexer.Keywords["iny"] = token_type.INY
+	Lexer.Keywords["jmp"] = token_type.JMP
+	Lexer.Keywords["jsr"] = token_type.JSR
+	Lexer.Keywords["lda"] = token_type.LDA
+	Lexer.Keywords["ldx"] = token_type.LDX
+	Lexer.Keywords["ldy"] = token_type.LDY
+	Lexer.Keywords["lsr"] = token_type.LSR
+	Lexer.Keywords["nop"] = token_type.NOP
+	Lexer.Keywords["ora"] = token_type.ORA
+	Lexer.Keywords["pha"] = token_type.PHA
+	Lexer.Keywords["php"] = token_type.PHP
+	Lexer.Keywords["pla"] = token_type.PLA
+	Lexer.Keywords["plp"] = token_type.PLP
+	Lexer.Keywords["rol"] = token_type.ROL
+	Lexer.Keywords["ror"] = token_type.ROR
+	Lexer.Keywords["rti"] = token_type.RTI
+	Lexer.Keywords["rts"] = token_type.RTS
+	Lexer.Keywords["sbc"] = token_type.SBC
+	Lexer.Keywords["sec"] = token_type.SEC
+	Lexer.Keywords["sed"] = token_type.SED
+	Lexer.Keywords["sei"] = token_type.SEI
+	Lexer.Keywords["sta"] = token_type.STA
+	Lexer.Keywords["stx"] = token_type.STX
+	Lexer.Keywords["sty"] = token_type.STY
+	Lexer.Keywords["tax"] = token_type.TAX
+	Lexer.Keywords["tay"] = token_type.TAY
+	Lexer.Keywords["tsx"] = token_type.TSX
+	Lexer.Keywords["txa"] = token_type.TXA
+	Lexer.Keywords["txs"] = token_type.TXS
+	Lexer.Keywords["tya"] = token_type.TYA
+	Lexer.Keywords["byte"] = token_type.BYTE
+	Lexer.Keywords["word"] = token_type.WORD
 }
 
 
