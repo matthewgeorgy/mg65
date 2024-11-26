@@ -132,21 +132,29 @@ ValidateTokens :: proc(Tokens : []token)
 	{
 		if len(Tokens[1:]) == 1
 		{
-			// Param := Tokens[1]
+			Constant := Tokens[1]
 
-			// if Param.Type == token_type.NUMBER
-			// {
-
-			// }
-			// else
-			// {
-			// 	ReportError(CurrentLine, "Directive must take a constant") 
-			// }
+			if Instruction.Type == token_type.BYTE
+			{
+				if Constant.Type != token_type.NUMBER8
+				{
+					ReportError(CurrentLine, ".BYTE directive must take a byte constant")
+				}
+			}
+			else // Instruction.Type == token_type.WORD
+			{
+				if Constant.Type != token_type.NUMBER16
+				{
+					ReportError(CurrentLine, ".WORD directive must take a word constant")
+				}
+			}
 		}
 		else
 		{
 			ReportError(CurrentLine, "Wrong number of arguments for a directive")
 		}
+
+		return
 	}
 	else
 	{
@@ -387,6 +395,26 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 	CurrentLine := Tokens[0].LineNumber
 
 	Instruction := Tokens[0]
+
+	if Instruction.Type == token_type.BYTE || Instruction.Type == token_type.WORD
+	{
+		Constant := Tokens[1]
+
+		if Instruction.Type == token_type.BYTE
+		{
+			File.Data[File.Ptr] = Constant.Literal.(u8)
+			File.Ptr += 1
+		}
+		else
+		{
+			File.Data[File.Ptr]     = u8(0x00FF & Constant.Literal.(u16)) // lo-byte
+			File.Data[File.Ptr + 1] = u8((0xFF00 & Constant.Literal.(u16)) >> 8) // hi-byte
+			File.Ptr += 2
+		}
+
+		return
+	}
+
 	Opcode = gOpcodeTable[Instruction.Type]
 
 	if Opcode.Implicit != 0 || Instruction.Type == token_type.BRK
