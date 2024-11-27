@@ -193,6 +193,24 @@ ValidateTokens :: proc(Tokens : []token)
 
 	RemainingTokens := Tokens[1:]
 	TokenCount := len(RemainingTokens)
+
+	for Token, Index in RemainingTokens
+	{
+		if Token.Type == token_type.IDENTIFIER
+		{
+			NewToken, Exists := DefineTable[Token.Lexeme]
+			if !Exists
+			{
+				ReportError(CurrentLine, strings.concatenate([]string{"Unknown symbol", Token.Lexeme}))
+				return
+			}
+			else
+			{
+				RemainingTokens[Index] = NewToken
+			}
+		}
+	}
+
 	// 0 = Implicit
 	// 1 = Accumulator, Immediate, ZeroPage, Absolute
 	// 3 = ZeroPageX, ZeroPageY, AbsoluteX, AbsoluteY, Indirect
@@ -216,20 +234,6 @@ ValidateTokens :: proc(Tokens : []token)
 	if TokenCount == 1 // Accumulator, Immediate, ZeroPage, Absolute
 	{
 		Arg := RemainingTokens[0]
-
-		if Arg.Type == token_type.IDENTIFIER
-		{
-			OriginalLexeme := Arg.Lexeme
-			NewArg, Exists := DefineTable[Arg.Lexeme]
-			if !Exists
-			{
-				ReportError(CurrentLine, "Could not find symbol")
-			}
-			else
-			{
-				Arg = NewArg
-			}
-		}
 
 		if Arg.Type == token_type.A
 		{
