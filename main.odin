@@ -31,6 +31,8 @@ StringFile :: proc(FileName : string) -> [dynamic]string
 	return Lines
 }
 
+DefineTable : map[string]token
+
 main :: proc()
 {
 	Args := os.args
@@ -79,9 +81,11 @@ main :: proc()
 		append(&TokenSet[Token.LineNumber], Token)
 	}
 
-	// Validate tokens in any order
-	for LineNumber, Tokens in TokenSet
+	// Validate tokens in order
+	for LineNumber in LineNumbers
 	{
+		Tokens := TokenSet[LineNumber]
+		// fmt.println(LineNumber, Tokens)
 		ValidateTokens(Tokens[:])
 	}
 
@@ -93,6 +97,8 @@ main :: proc()
 		fmt.printf(" Error: ")
 		fmt.printf("%s\n", strings.clone_to_cstring(Error.Message))
 	}
+
+	// fmt.println(DefineTable)
 
 	// Generate code
 	if len(gErrors) == 0
@@ -128,7 +134,7 @@ ValidateTokens :: proc(Tokens : []token)
 	{
 		Opcode = gOpcodeTable[Instruction.Type]
 	}
-	else if Instruction.Type == token_type.BYTE || Instruction.Type == token_type.WORD
+	else if token_type.BYTE <= Instruction.Type && Instruction.Type <= token_type.DEFINE
 	{
 		if len(Tokens[1:]) == 1
 		{
@@ -147,6 +153,29 @@ ValidateTokens :: proc(Tokens : []token)
 				{
 					ReportError(CurrentLine, ".WORD directive must take a word constant")
 				}
+			}
+		}
+		else if len(Tokens[1:]) == 2
+		{
+			Name := Tokens[1]
+			Value := Tokens[2]
+
+			if Name.Type == token_type.IDENTIFIER
+			{
+				if (Value.Type == token_type.ADDRESS8) ||
+				   (Value.Type == token_type.ADDRESS16) ||
+				   (Value.Type == token_type.NUMBER8)
+			   {
+				   DefineTable[Name.Lexeme] = Value
+			   }
+			   else
+			   {
+				   ReportError(CurrentLine, "Must be an 8bit or 16bit address OR an 8bit constant")
+			   }
+			}
+			else
+			{
+				ReportError(CurrentLine, "Define symbol must be an identifier")
 			}
 		}
 		else
@@ -187,6 +216,20 @@ ValidateTokens :: proc(Tokens : []token)
 	if TokenCount == 1 // Accumulator, Immediate, ZeroPage, Absolute
 	{
 		Arg := RemainingTokens[0]
+
+		if Arg.Type == token_type.IDENTIFIER
+		{
+			OriginalLexeme := Arg.Lexeme
+			NewArg, Exists := DefineTable[Arg.Lexeme]
+			if !Exists
+			{
+				ReportError(CurrentLine, "Could not find symbol")
+			}
+			else
+			{
+				Arg = NewArg
+			}
+		}
 
 		if Arg.Type == token_type.NUMBER8 // Immediate
 		{
@@ -430,6 +473,11 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 	if TokenCount == 1
 	{
 		Arg := Tokens[1]
+
+		if Arg.Type == token_type.IDENTIFIER
+		{
+			Arg = DefineTable[Arg.Lexeme]
+		}
 
 		if Arg.Type == token_type.NUMBER8 // Immediate
 		{

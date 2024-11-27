@@ -9,7 +9,7 @@ token_type :: enum
 	IDENTIFIER, STIRNG, NUMBER8, NUMBER16, ADDRESS8, ADDRESS16,
 
 	// Directives
-	BYTE, WORD,
+	BYTE, WORD, DEFINE,
 
 	// Opcodes
 	ADC, AND, ASL, BCC, BCS, BEQ, BIT, BMI, BNE, BPL, BRK, BVC, BVS, CLC,

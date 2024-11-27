@@ -1,10 +1,12 @@
-.byte #$40
-.word #$4040
-.word #$0124
+; .byte #$40
+; .word #$1234
+; .word #$5678
+.define X $45
+.define Z $4016
 
 ADC #$4A
+ADC X
 TSX ; this is a comment
 LDA $4015 ; more
-; more 
-; blah blah blah
+LDA Z ; more
 
