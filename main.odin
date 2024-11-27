@@ -231,7 +231,14 @@ ValidateTokens :: proc(Tokens : []token)
 			}
 		}
 
-		if Arg.Type == token_type.NUMBER8 // Immediate
+		if Arg.Type == token_type.A
+		{
+			if Opcode.Accumulator == 0
+			{
+				ReportError(CurrentLine, "This instruction does not support accumulator")
+			}
+		}
+		else if Arg.Type == token_type.NUMBER8 // Immediate
 		{
 			if Opcode.Immediate == 0
 			{
@@ -252,20 +259,6 @@ ValidateTokens :: proc(Tokens : []token)
 				ReportError(CurrentLine, "This instruction does not support absolute addressing")
 			}
 		}
-		else if Arg.Type == token_type.IDENTIFIER // Accumulator
-		{
-			if Arg.Lexeme == "A" || Arg.Lexeme == "a"
-			{
-				if Opcode.Accumulator == 0
-				{
-					ReportError(CurrentLine, "This instruction does not support accumulator")
-				}
-			}
-			else
-			{
-				ReportError(CurrentLine, "Invalid argument")
-			}
-		}
 		else
 		{
 			ReportError(CurrentLine, "Invalid argument")
@@ -281,14 +274,14 @@ ValidateTokens :: proc(Tokens : []token)
 
 			if Args[1].Type == token_type.COMMA
 			{
-				if Args[2].Lexeme == "X" || Args[2].Lexeme == "x"
+				if Args[2].Type == token_type.X
 				{
 					if Opcode.ZeroPageX == 0
 					{
 						ReportError(CurrentLine, "This instruction does not support ZeroPageX")
 					}
 				}
-				else if Args[2].Lexeme == "Y" || Args[2].Lexeme == "y"
+				else if Args[2].Type == token_type.Y
 				{
 					if Opcode.ZeroPageY == 0
 					{
@@ -311,14 +304,14 @@ ValidateTokens :: proc(Tokens : []token)
 
 			if Args[1].Type == token_type.COMMA
 			{
-				if Args[2].Lexeme == "X" || Args[2].Lexeme == "x"
+				if Args[2].Type == token_type.X
 				{
 					if Opcode.AbsoluteX == 0
 					{
 						ReportError(CurrentLine, "This instruction does not support AbsoluteX")
 					}
 				}
-				else if Args[2].Lexeme == "Y" || Args[2].Lexeme == "y"
+				else if Args[2].Type == token_type.Y
 				{
 					if Opcode.AbsoluteY == 0
 					{
@@ -371,7 +364,7 @@ ValidateTokens :: proc(Tokens : []token)
 			{
 				if Args[2].Type == token_type.COMMA // IndirectX
 				{
-					if Args[3].Lexeme == "X" || Args[3].Lexeme == "x"
+					if Args[3].Type == token_type.X
 					{
 						if Args[4].Type == token_type.RIGHT_PAREN
 						{
@@ -394,7 +387,7 @@ ValidateTokens :: proc(Tokens : []token)
 				{
 					if Args[3].Type == token_type.COMMA
 					{
-						if Args[4].Lexeme == "Y" || Args[4].Lexeme == "y"
+						if Args[4].Type == token_type.Y
 						{
 							if Opcode.IndirectY == 0
 							{
@@ -518,11 +511,11 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 
 		if Args[0].Type == token_type.ADDRESS8 // ZeroPageX, ZeroPageY
 		{
-			if (Args[2].Lexeme == "X" || Args[2].Lexeme == "x")
+			if Args[2].Type == token_type.X
 			{
 				File.Data[File.Ptr] = Opcode.ZeroPageX
 			}
-			else if (Args[2].Lexeme == "Y" || Args[2].Lexeme == "y")
+			else if Args[2].Type == token_type.Y
 			{
 				File.Data[File.Ptr] = Opcode.ZeroPageY
 			}
@@ -533,11 +526,11 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 		}
 		else if Args[0].Type == token_type.ADDRESS16 // AbsoluteX, AbsoluteY
 		{
-			if (Args[2].Lexeme == "X" || Args[2].Lexeme == "x")
+			if Args[2].Type == token_type.X
 			{
 				File.Data[File.Ptr] = Opcode.AbsoluteX
 			}
-			else if (Args[2].Lexeme == "Y" || Args[2].Lexeme == "y")
+			else if Args[2].Type == token_type.Y
 			{
 				File.Data[File.Ptr] = Opcode.AbsoluteY
 			}

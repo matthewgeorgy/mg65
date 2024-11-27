@@ -357,6 +357,9 @@ LexerInitializeKeywordTable :: proc(Lexer : ^lexer)
 	Lexer.Keywords["TXA"] = token_type.TXA
 	Lexer.Keywords["TXS"] = token_type.TXS
 	Lexer.Keywords["TYA"] = token_type.TYA
+	Lexer.Keywords["A"] = token_type.A
+	Lexer.Keywords["X"] = token_type.X
+	Lexer.Keywords["Y"] = token_type.Y
 	Lexer.Keywords["BYTE"] = token_type.BYTE
 	Lexer.Keywords["WORD"] = token_type.WORD
 	Lexer.Keywords["DEFINE"] = token_type.DEFINE
@@ -417,6 +420,9 @@ LexerInitializeKeywordTable :: proc(Lexer : ^lexer)
 	Lexer.Keywords["txa"] = token_type.TXA
 	Lexer.Keywords["txs"] = token_type.TXS
 	Lexer.Keywords["tya"] = token_type.TYA
+	Lexer.Keywords["a"] = token_type.A
+	Lexer.Keywords["x"] = token_type.X
+	Lexer.Keywords["y"] = token_type.Y
 	Lexer.Keywords["byte"] = token_type.BYTE
 	Lexer.Keywords["word"] = token_type.WORD
 	Lexer.Keywords["define"] = token_type.DEFINE
