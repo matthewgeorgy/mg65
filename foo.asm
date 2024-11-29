@@ -1,13 +1,18 @@
-; branch:
-  LDX #$08
-  BNE decrement
-  DEX
-  STX $0200
-  CPX #$03
-decrement:
-  STX $0201
-  DEX
-  JMP branch
-  JSR branch
-  JMP ($1234)
+  JSR init
+  JSR loop
+  JSR end
+
+init:
+  LDX #$00
+  RTS
+
+loop:
+  INX
+  CPX #$05
+  BNE loop
+  RTS
+
+end:
   BRK
+init:
+

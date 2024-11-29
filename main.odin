@@ -71,6 +71,8 @@ main :: proc()
 	LexerScanTokens(&Lexer)
 
 	InitializeOpcodeTable(&gOpcodeTable)
+	LabelReferences = make(map[string][dynamic]label_reference)
+	LabelAddresses = make(map[string]label_address)
 
 	TokenSet := make(map[int][dynamic]token)
 	LineNumbers : [dynamic]int
@@ -103,9 +105,6 @@ main :: proc()
 		fmt.print(ansi.CSI + ansi.FG_RED + ansi.SGR + string(" Error: ") + ansi.CSI + ansi.RESET + ansi.SGR)
 		fmt.print(strings.clone_to_cstring(Error.Message), "\n")
 	}
-
-	LabelReferences = make(map[string][dynamic]label_reference)
-	LabelAddresses = make(map[string]uint)
 
 	// Generate code
 	File : file
@@ -223,6 +222,22 @@ PreprocessTokens :: proc(Tokens : []token)
 		if TokenCount != 0
 		{
 			ReportError(CurrentLine, "Labels must exist on line by themselves")
+		}
+
+		LabelName := Instruction.Lexeme
+
+		if !(LabelName in LabelAddresses)
+		{
+			Address := label_address{0, CurrentLine}
+			LabelAddresses[LabelName] = Address
+		}
+		else
+		{
+			Address := LabelAddresses[LabelName]
+
+			Temp := fmt.aprintf("' was already defined on line %d", Address.LineNumber)
+			Message := strings.concatenate([]string{"Label '", LabelName, Temp})
+			ReportError(CurrentLine, Message)
 		}
 
 		return
@@ -538,8 +553,14 @@ label_reference :: struct
 	IsBranch : bool // true = Branch, false = Jump
 }
 
+label_address :: struct
+{
+	Address : u16,
+	LineNumber : int,
+}
+
 LabelReferences : map[string][dynamic]label_reference
-LabelAddresses : map[string]uint
+LabelAddresses : map[string]label_address
 
 GenerateCode :: proc(Tokens : []token, File : ^file)
 {
@@ -571,7 +592,7 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 	{
 		LabelName := Instruction.Lexeme
 
-		LabelAddresses[LabelName] = File.Ptr
+		LabelAddresses[LabelName] = label_address{u16(File.Ptr), 0}
 		// fmt.println(LabelName, File.Ptr)
 		return
 	}
@@ -836,7 +857,7 @@ ResolveLabels :: proc(File : ^file)
 		}
 		else
 		{
-			ResolvedAddress := LabelAddresses[Name]
+			ResolvedAddress := LabelAddresses[Name].Address
 
 			for Ref in References
 			{
