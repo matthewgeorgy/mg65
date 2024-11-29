@@ -120,7 +120,7 @@ main :: proc()
 			GenerateCode(Tokens[:], &File)
 		}
 
-		fmt.println("Found", len(LabelReferences), "label(s)")
+		fmt.println("Found", len(LabelNames), "label(s)")
 		fmt.println("Resolving labels...")
 		ResolveLabels(&File)
 
@@ -276,7 +276,7 @@ PreprocessTokens :: proc(Tokens : []token)
 			{
 				Arg := RemainingTokens[0]
 
-				if Arg.Type != token_type.ADDRESS16 || Arg.Type != token_type.IDENTIFIER
+				if Arg.Type != token_type.ADDRESS16 && Arg.Type != token_type.IDENTIFIER
 				{
 					ReportError(CurrentLine, "Instruction must take an absolute address or label")
 				}
@@ -289,7 +289,7 @@ PreprocessTokens :: proc(Tokens : []token)
 				{
 					if Args[1].Type == token_type.ADDRESS16
 					{
-						if Args[2].Type == token_type.ADDRESS16
+						if Args[2].Type == token_type.RIGHT_PAREN
 						{
 							if Opcode.Indirect == 0
 							{
@@ -560,7 +560,7 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 		LabelName := Instruction.Lexeme
 
 		LabelAddresses[LabelName] = File.Ptr
-		fmt.println(LabelName, File.Ptr)
+		// fmt.println(LabelName, File.Ptr)
 		return
 	}
 
@@ -829,12 +829,10 @@ ResolveLabels :: proc(File : ^file)
 					if AddressDiff > 0 // Jump backwards
 					{
 						JumpOffset = 0xFF - u8(AddressDiff)
-						fmt.println("backwards")
 					}
 					else // Jump forwards
 					{
 						JumpOffset = u8(-AddressDiff) - 1
-						fmt.println("forwards")
 					}
 
 					File.Data[Ref.Address] = JumpOffset
