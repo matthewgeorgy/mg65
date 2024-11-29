@@ -72,7 +72,7 @@ main :: proc()
 
 	InitializeOpcodeTable(&gOpcodeTable)
 	LabelReferences = make(map[string][dynamic]label_reference)
-	LabelAddresses = make(map[string]label_address)
+	LabelDefinitions = make(map[string]label_definition)
 
 	TokenSet := make(map[int][dynamic]token)
 	LineNumbers : [dynamic]int
@@ -166,6 +166,28 @@ PreprocessTokens :: proc(Tokens : []token)
 	{
 		Opcode = gOpcodeTable[Instruction.Type]
 
+		// Find & replace tokens with macros in the DefineTable
+		for Token, Index in RemainingTokens
+		{
+			if Token.Type == token_type.IDENTIFIER
+			{
+				// Don't look up name if it's a label
+				if !slice.contains(LabelNames[:], Token.Lexeme)
+				{
+					NewToken, Exists := DefineTable[Token.Lexeme]
+					if !Exists
+					{
+						ReportError(CurrentLine, strings.concatenate([]string{"Unknown symbol: ", Token.Lexeme}))
+						return
+					}
+					else
+					{
+						RemainingTokens[Index] = NewToken
+					}
+				}
+			}
+		}
+
 		if Opcode.Implicit != 0 || Instruction.Type == token_type.BRK
 		{
 			if TokenCount != 0
@@ -175,7 +197,7 @@ PreprocessTokens :: proc(Tokens : []token)
 			return
 		}
 
-
+		// Validate a non-implicit instruction has 0 arguments
 		if Opcode.Implicit == 0 && TokenCount == 0
 		{
 			ReportError(CurrentLine, "This instruction does not support implicit mode")
@@ -246,27 +268,7 @@ PreprocessTokens :: proc(Tokens : []token)
 			return
 		}
 
-		// Find & replace tokens with macros
-		for Token, Index in RemainingTokens
-		{
-			if Token.Type == token_type.IDENTIFIER
-			{
-				if !slice.contains(LabelNames[:], Token.Lexeme)
-				{
-					NewToken, Exists := DefineTable[Token.Lexeme]
-					if !Exists
-					{
-						ReportError(CurrentLine, strings.concatenate([]string{"Unknown symbol: ", Token.Lexeme}))
-						return
-					}
-					else
-					{
-						RemainingTokens[Index] = NewToken
-					}
-				}
-			}
-		}
-
+		// Deal with ordinary instructions as usual
 		if TokenCount == 1 // Accumulator, Immediate, ZeroPage, Absolute
 		{
 			Arg := RemainingTokens[0]
@@ -466,6 +468,7 @@ PreprocessTokens :: proc(Tokens : []token)
 	}
 	else if token_type.BYTE <= Instruction.Type && Instruction.Type <= token_type.DEFINE
 	{
+		// TODO(matthew): this needs bulletproofing!!!
 		if len(Tokens[1:]) == 1
 		{
 			Constant := Tokens[1]
@@ -515,25 +518,27 @@ PreprocessTokens :: proc(Tokens : []token)
 	}
 	else if Instruction.Type == token_type.LABEL
 	{
-		if TokenCount != 0
+		if TokenCount == 0
 		{
-			ReportError(CurrentLine, "Labels must exist on line by themselves")
-		}
+			LabelName := Instruction.Lexeme
 
-		LabelName := Instruction.Lexeme
+			if !(LabelName in LabelDefinitions)
+			{
+				Address := label_definition{0, CurrentLine}
+				LabelDefinitions[LabelName] = Address
+			}
+			else
+			{
+				Address := LabelDefinitions[LabelName]
 
-		if !(LabelName in LabelAddresses)
-		{
-			Address := label_address{0, CurrentLine}
-			LabelAddresses[LabelName] = Address
+				Temp := fmt.aprintf("' was already defined on line %d", Address.LineNumber)
+				Message := strings.concatenate([]string{"Label '", LabelName, Temp})
+				ReportError(CurrentLine, Message)
+			}
 		}
 		else
 		{
-			Address := LabelAddresses[LabelName]
-
-			Temp := fmt.aprintf("' was already defined on line %d", Address.LineNumber)
-			Message := strings.concatenate([]string{"Label '", LabelName, Temp})
-			ReportError(CurrentLine, Message)
+			ReportError(CurrentLine, "Labels must exist on a line by themselves")
 		}
 	}
 	else
@@ -549,14 +554,14 @@ label_reference :: struct
 	IsBranch : bool // true = Branch, false = Jump
 }
 
-label_address :: struct
+label_definition :: struct
 {
 	Address : u16,
 	LineNumber : int,
 }
 
 LabelReferences : map[string][dynamic]label_reference
-LabelAddresses : map[string]label_address
+LabelDefinitions : map[string]label_definition
 
 GenerateCode :: proc(Tokens : []token, File : ^file)
 {
@@ -588,7 +593,7 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 	{
 		LabelName := Instruction.Lexeme
 
-		LabelAddresses[LabelName] = label_address{u16(File.Ptr), 0}
+		LabelDefinitions[LabelName] = label_definition{u16(File.Ptr), 0}
 		// fmt.println(LabelName, File.Ptr)
 		return
 	}
@@ -773,78 +778,11 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 	}
 }
 
-PreprocessJumpBranch :: proc(Tokens : []token)
-{
-	CurrentLine := Tokens[0].LineNumber
-	Opcode := gOpcodeTable[Tokens[0].Type]
-	RemainingTokens := Tokens[1:]
-	TokenCount := len(RemainingTokens)
-
-	if Opcode.Branch != 0 // Branch
-	{
-		if TokenCount == 1
-		{
-			Arg := RemainingTokens[0]
-
-			if Arg.Type != token_type.IDENTIFIER
-			{
-				ReportError(CurrentLine, "Branch argument must be an identifier (label)")
-			}
-		}
-		else // NOTE: if TokenCount == 0 (need other cases)
-		{
-			ReportError(CurrentLine, "Branch instruction requires a label to jump to")
-		}
-	}
-	else // Jump
-	{
-		if TokenCount == 1
-		{
-			Arg := RemainingTokens[0]
-
-			if Arg.Type != token_type.ADDRESS16 || Arg.Type != token_type.IDENTIFIER
-			{
-				ReportError(CurrentLine, "Instruction must take an absolute address or label")
-			}
-		}
-		else if TokenCount == 3
-		{
-			Args := RemainingTokens
-
-			if Args[0].Type == token_type.LEFT_PAREN
-			{
-				if Args[1].Type == token_type.ADDRESS16
-				{
-					if Args[2].Type == token_type.ADDRESS16
-					{
-						if Opcode.Indirect == 0
-						{
-							ReportError(CurrentLine, "This instruction does not support indirect mode")
-						}
-					}
-					else
-					{
-						ReportError(CurrentLine, "Invalid syntax")
-					}
-				}
-				else
-				{
-					ReportError(CurrentLine, "Invalid syntax")
-				}
-			}
-			else
-			{
-				ReportError(CurrentLine, "Invalid syntax")
-			}
-		}
-	}
-}
-
 ResolveLabels :: proc(File : ^file)
 {
 	for Name, References in LabelReferences
 	{
-		if !(Name in LabelAddresses)
+		if !(Name in LabelDefinitions)
 		{
 			for Ref in References
 			{
@@ -853,12 +791,13 @@ ResolveLabels :: proc(File : ^file)
 		}
 		else
 		{
-			ResolvedAddress := LabelAddresses[Name].Address
+			ResolvedAddress := LabelDefinitions[Name].Address
 
 			for Ref in References
 			{
 				if Ref.IsBranch
 				{
+					// TODO(matthew): make sure that the address is reachable! report error otherwise
 					AddressDiff : int = int(Ref.Address) - int(ResolvedAddress)
 					JumpOffset : u8
 
