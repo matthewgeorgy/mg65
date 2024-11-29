@@ -3,10 +3,9 @@
 for %%f in (test\tests\*.asm) do (
 	main.exe %%f
 )
+mv *.o test\out
 
 cls
-
-mv *.o test\out
 
 cd test
 test.exe

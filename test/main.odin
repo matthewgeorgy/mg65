@@ -27,6 +27,7 @@ main :: proc()
 	OutputRead, GoldRead : win32.DWORD
 	Passed : bool
 
+	fmt.printf("TEST RESULTS:\n")
 	for i := 0; i < len(OutputFiles); i += 1
 	{
 		OutputFileName := OutputFiles[i]
@@ -41,7 +42,7 @@ main :: proc()
 		win32.ReadFile(OutputFile, rawptr(&OutputBuffer[0]), 256, &OutputRead, nil)
 		win32.ReadFile(GoldFile, rawptr(&GoldBuffer[0]), 256, &GoldRead, nil)
 
-		fmt.printf("TEST: %s...................", strings.clone_to_cstring(OutputFileName))
+		fmt.printf("%s...................", strings.clone_to_cstring(OutputFileName))
 		Passed = true
 
 		if OutputRead == GoldRead
