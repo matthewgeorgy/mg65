@@ -165,6 +165,304 @@ PreprocessTokens :: proc(Tokens : []token)
 	if token_type.ADC <= Instruction.Type && Instruction.Type <= token_type.TYA
 	{
 		Opcode = gOpcodeTable[Instruction.Type]
+
+		if Opcode.Implicit != 0 || Instruction.Type == token_type.BRK
+		{
+			if TokenCount != 0
+			{
+				ReportError(CurrentLine, "Implicit instructions take 0 arguments.")
+			}
+			return
+		}
+
+
+		if Opcode.Implicit == 0 && TokenCount == 0
+		{
+			ReportError(CurrentLine, "This instruction does not support implicit mode")
+			return
+		}
+
+		// Handle a jump or branch instruction separately
+		if Opcode.Branch != 0 || Instruction.Type == token_type.JMP || Instruction.Type == token_type.JSR
+		{
+			if Opcode.Branch != 0 // Branch
+			{
+				if TokenCount == 1
+				{
+					Arg := RemainingTokens[0]
+
+					if Arg.Type != token_type.IDENTIFIER
+					{
+						ReportError(CurrentLine, "Branch argument must be an identifier (label)")
+					}
+				}
+				else // NOTE: if TokenCount == 0 (need other cases)
+				{
+					ReportError(CurrentLine, "Branch instruction requires a label to jump to")
+				}
+			}
+			else // Jump
+			{
+				if TokenCount == 1
+				{
+					Arg := RemainingTokens[0]
+
+					if Arg.Type != token_type.ADDRESS16 && Arg.Type != token_type.IDENTIFIER
+					{
+						ReportError(CurrentLine, "Instruction must take an absolute address or label")
+					}
+				}
+				else if TokenCount == 3
+				{
+					Args := RemainingTokens
+
+					if Args[0].Type == token_type.LEFT_PAREN
+					{
+						if Args[1].Type == token_type.ADDRESS16
+						{
+							if Args[2].Type == token_type.RIGHT_PAREN
+							{
+								if Opcode.Indirect == 0
+								{
+									ReportError(CurrentLine, "This instruction does not support indirect mode")
+								}
+							}
+							else
+							{
+								ReportError(CurrentLine, "Invalid syntax")
+							}
+						}
+						else
+						{
+							ReportError(CurrentLine, "Invalid syntax")
+						}
+					}
+					else
+					{
+						ReportError(CurrentLine, "Invalid syntax")
+					}
+				}
+			}
+			return
+		}
+
+		// Find & replace tokens with macros
+		for Token, Index in RemainingTokens
+		{
+			if Token.Type == token_type.IDENTIFIER
+			{
+				if !slice.contains(LabelNames[:], Token.Lexeme)
+				{
+					NewToken, Exists := DefineTable[Token.Lexeme]
+					if !Exists
+					{
+						ReportError(CurrentLine, strings.concatenate([]string{"Unknown symbol: ", Token.Lexeme}))
+						return
+					}
+					else
+					{
+						RemainingTokens[Index] = NewToken
+					}
+				}
+			}
+		}
+
+		if TokenCount == 1 // Accumulator, Immediate, ZeroPage, Absolute
+		{
+			Arg := RemainingTokens[0]
+
+			if Arg.Type == token_type.A
+			{
+				if Opcode.Accumulator == 0
+				{
+					ReportError(CurrentLine, "This instruction does not support accumulator")
+				}
+			}
+			else if Arg.Type == token_type.NUMBER8 // Immediate
+			{
+				if Opcode.Immediate == 0
+				{
+					ReportError(CurrentLine, "This instruction does not support immediates")
+				}
+			}
+			else if Arg.Type == token_type.ADDRESS8 // ZeroPage
+			{
+				if Opcode.ZeroPage == 0
+				{
+					ReportError(CurrentLine, "This instruction does not support zero-page addressing")
+				}
+			}
+			else if Arg.Type == token_type.ADDRESS16 // Absolute
+			{
+				if Opcode.Absolute == 0
+				{
+					ReportError(CurrentLine, "This instruction does not support absolute addressing")
+				}
+			}
+			else
+			{
+				ReportError(CurrentLine, "Invalid argument")
+			}
+		}
+		else if TokenCount == 3 // ZeroPageX, ZeroPageY, AbsoluteX, AbsoluteY, Indirect
+		{
+			Args := RemainingTokens
+
+			if Args[0].Type == token_type.ADDRESS8 // ZeroPageX, ZeroPageY
+			{
+				Address8 := Args[0].Literal.(u8)
+
+				if Args[1].Type == token_type.COMMA
+				{
+					if Args[2].Type == token_type.X
+					{
+						if Opcode.ZeroPageX == 0
+						{
+							ReportError(CurrentLine, "This instruction does not support ZeroPageX")
+						}
+					}
+					else if Args[2].Type == token_type.Y
+					{
+						if Opcode.ZeroPageY == 0
+						{
+							ReportError(CurrentLine, "This instruction does not support ZeroPageY")
+						}
+					}
+					else
+					{
+						ReportError(CurrentLine, "Invalid argument")
+					}
+				}
+				else
+				{
+					ReportError(CurrentLine, "Invalid argument")
+				}
+			}
+			else if Args[0].Type == token_type.ADDRESS16 // AbsoluteX, AbsoluteY
+			{
+				Address16 := Args[0].Literal.(u16)
+
+				if Args[1].Type == token_type.COMMA
+				{
+					if Args[2].Type == token_type.X
+					{
+						if Opcode.AbsoluteX == 0
+						{
+							ReportError(CurrentLine, "This instruction does not support AbsoluteX")
+						}
+					}
+					else if Args[2].Type == token_type.Y
+					{
+						if Opcode.AbsoluteY == 0
+						{
+							ReportError(CurrentLine, "This instruction does not support AbsoluteY")
+						}
+					}
+					else
+					{
+						ReportError(CurrentLine, "Invalid argument")
+					}
+				}
+				else
+				{
+					ReportError(CurrentLine, "Invalid argument")
+				}
+			}
+			else if Args[0].Type == token_type.LEFT_PAREN // Indirect
+			{
+				if Args[1].Type == token_type.ADDRESS16
+				{
+					if Args[2].Type == token_type.RIGHT_PAREN
+					{
+						if Opcode.Indirect == 0
+						{
+							ReportError(CurrentLine, "This instruction does not support indirect addressing")
+						}
+					}
+					else
+					{
+						ReportError(CurrentLine, "Invalid argument")
+					}
+				}
+				else
+				{
+					ReportError(CurrentLine, "Invalid argument")
+				}
+			}
+			else
+			{
+				ReportError(CurrentLine, "Invalid argument")
+			}
+		}
+		else if TokenCount == 5 // IndirectX, IndirectY
+		{
+			Args := RemainingTokens
+
+			if Args[0].Type == token_type.LEFT_PAREN
+			{
+				if Args[1].Type == token_type.ADDRESS8
+				{
+					if Args[2].Type == token_type.COMMA // IndirectX
+					{
+						if Args[3].Type == token_type.X
+						{
+							if Args[4].Type == token_type.RIGHT_PAREN
+							{
+								if Opcode.IndirectX == 0
+								{
+									ReportError(CurrentLine, "This instruction does not support IndirectX")
+								}
+							}
+							else
+							{
+								ReportError(CurrentLine, "Invalid argument")
+							}
+						}
+						else
+						{
+							ReportError(CurrentLine, "Invalid argument")
+						}
+					}
+					else if Args[2].Type == token_type.RIGHT_PAREN // IndirectY
+					{
+						if Args[3].Type == token_type.COMMA
+						{
+							if Args[4].Type == token_type.Y
+							{
+								if Opcode.IndirectY == 0
+								{
+									ReportError(CurrentLine, "This instruction does not support IndirectY")
+								}
+							}
+							else
+							{
+								ReportError(CurrentLine, "Invalid argument")
+							}
+						}
+						else
+						{
+							ReportError(CurrentLine, "Invalid argument")
+						}
+					}
+					else
+					{
+						ReportError(CurrentLine, "Invalid argument")
+					}
+				}
+				else
+				{
+					ReportError(CurrentLine, "Indirect addressing requires a 1 byte address")
+				}
+			}
+			else
+			{
+				ReportError(CurrentLine, "Invalid argument")
+			}
+		}
+		else
+		{
+			ReportError(CurrentLine, "Too many arguments")
+		}
 	}
 	else if token_type.BYTE <= Instruction.Type && Instruction.Type <= token_type.DEFINE
 	{
@@ -214,8 +512,6 @@ PreprocessTokens :: proc(Tokens : []token)
 		{
 			ReportError(CurrentLine, "Wrong number of arguments for a directive")
 		}
-
-		return
 	}
 	else if Instruction.Type == token_type.LABEL
 	{
@@ -239,310 +535,10 @@ PreprocessTokens :: proc(Tokens : []token)
 			Message := strings.concatenate([]string{"Label '", LabelName, Temp})
 			ReportError(CurrentLine, Message)
 		}
-
-		return
 	}
 	else
 	{
 		ReportError(CurrentLine, "Code must start with an instruction or directive")
-		return
-	}
-
-	if Opcode.Implicit != 0 || Instruction.Type == token_type.BRK
-	{
-		if TokenCount != 0
-		{
-			ReportError(CurrentLine, "Implicit instructions take 0 arguments.")
-		}
-		return
-	}
-
-
-	if Opcode.Implicit == 0 && TokenCount == 0
-	{
-		ReportError(CurrentLine, "This instruction does not support implicit mode")
-		return
-	}
-
-	// Handle a jump or branch instruction separately
-	if Opcode.Branch != 0 || Instruction.Type == token_type.JMP || Instruction.Type == token_type.JSR
-	{
-		if Opcode.Branch != 0 // Branch
-		{
-			if TokenCount == 1
-			{
-				Arg := RemainingTokens[0]
-
-				if Arg.Type != token_type.IDENTIFIER
-				{
-					ReportError(CurrentLine, "Branch argument must be an identifier (label)")
-				}
-			}
-			else // NOTE: if TokenCount == 0 (need other cases)
-			{
-				ReportError(CurrentLine, "Branch instruction requires a label to jump to")
-			}
-		}
-		else // Jump
-		{
-			if TokenCount == 1
-			{
-				Arg := RemainingTokens[0]
-
-				if Arg.Type != token_type.ADDRESS16 && Arg.Type != token_type.IDENTIFIER
-				{
-					ReportError(CurrentLine, "Instruction must take an absolute address or label")
-				}
-			}
-			else if TokenCount == 3
-			{
-				Args := RemainingTokens
-
-				if Args[0].Type == token_type.LEFT_PAREN
-				{
-					if Args[1].Type == token_type.ADDRESS16
-					{
-						if Args[2].Type == token_type.RIGHT_PAREN
-						{
-							if Opcode.Indirect == 0
-							{
-								ReportError(CurrentLine, "This instruction does not support indirect mode")
-							}
-						}
-						else
-						{
-							ReportError(CurrentLine, "Invalid syntax")
-						}
-					}
-					else
-					{
-						ReportError(CurrentLine, "Invalid syntax")
-					}
-				}
-				else
-				{
-					ReportError(CurrentLine, "Invalid syntax")
-				}
-			}
-		}
-		return
-	}
-
-	for Token, Index in RemainingTokens
-	{
-		if Token.Type == token_type.IDENTIFIER
-		{
-			if !slice.contains(LabelNames[:], Token.Lexeme)
-			{
-				NewToken, Exists := DefineTable[Token.Lexeme]
-				if !Exists
-				{
-					ReportError(CurrentLine, strings.concatenate([]string{"Unknown symbol: ", Token.Lexeme}))
-					return
-				}
-				else
-				{
-					RemainingTokens[Index] = NewToken
-				}
-			}
-		}
-	}
-
-	if TokenCount == 1 // Accumulator, Immediate, ZeroPage, Absolute
-	{
-		Arg := RemainingTokens[0]
-
-		if Arg.Type == token_type.A
-		{
-			if Opcode.Accumulator == 0
-			{
-				ReportError(CurrentLine, "This instruction does not support accumulator")
-			}
-		}
-		else if Arg.Type == token_type.NUMBER8 // Immediate
-		{
-			if Opcode.Immediate == 0
-			{
-				ReportError(CurrentLine, "This instruction does not support immediates")
-			}
-		}
-		else if Arg.Type == token_type.ADDRESS8 // ZeroPage
-		{
-			if Opcode.ZeroPage == 0
-			{
-				ReportError(CurrentLine, "This instruction does not support zero-page addressing")
-			}
-		}
-		else if Arg.Type == token_type.ADDRESS16 // Absolute
-		{
-			if Opcode.Absolute == 0
-			{
-				ReportError(CurrentLine, "This instruction does not support absolute addressing")
-			}
-		}
-		else
-		{
-			ReportError(CurrentLine, "Invalid argument")
-		}
-	}
-	else if TokenCount == 3 // ZeroPageX, ZeroPageY, AbsoluteX, AbsoluteY, Indirect
-	{
-		Args := RemainingTokens
-
-		if Args[0].Type == token_type.ADDRESS8 // ZeroPageX, ZeroPageY
-		{
-			Address8 := Args[0].Literal.(u8)
-
-			if Args[1].Type == token_type.COMMA
-			{
-				if Args[2].Type == token_type.X
-				{
-					if Opcode.ZeroPageX == 0
-					{
-						ReportError(CurrentLine, "This instruction does not support ZeroPageX")
-					}
-				}
-				else if Args[2].Type == token_type.Y
-				{
-					if Opcode.ZeroPageY == 0
-					{
-						ReportError(CurrentLine, "This instruction does not support ZeroPageY")
-					}
-				}
-				else
-				{
-					ReportError(CurrentLine, "Invalid argument")
-				}
-			}
-			else
-			{
-				ReportError(CurrentLine, "Invalid argument")
-			}
-		}
-		else if Args[0].Type == token_type.ADDRESS16 // AbsoluteX, AbsoluteY
-		{
-			Address16 := Args[0].Literal.(u16)
-
-			if Args[1].Type == token_type.COMMA
-			{
-				if Args[2].Type == token_type.X
-				{
-					if Opcode.AbsoluteX == 0
-					{
-						ReportError(CurrentLine, "This instruction does not support AbsoluteX")
-					}
-				}
-				else if Args[2].Type == token_type.Y
-				{
-					if Opcode.AbsoluteY == 0
-					{
-						ReportError(CurrentLine, "This instruction does not support AbsoluteY")
-					}
-				}
-				else
-				{
-					ReportError(CurrentLine, "Invalid argument")
-				}
-			}
-			else
-			{
-				ReportError(CurrentLine, "Invalid argument")
-			}
-		}
-		else if Args[0].Type == token_type.LEFT_PAREN // Indirect
-		{
-			if Args[1].Type == token_type.ADDRESS16
-			{
-				if Args[2].Type == token_type.RIGHT_PAREN
-				{
-					if Opcode.Indirect == 0
-					{
-						ReportError(CurrentLine, "This instruction does not support indirect addressing")
-					}
-				}
-				else
-				{
-					ReportError(CurrentLine, "Invalid argument")
-				}
-			}
-			else
-			{
-				ReportError(CurrentLine, "Invalid argument")
-			}
-		}
-		else
-		{
-			ReportError(CurrentLine, "Invalid argument")
-		}
-	}
-	else if TokenCount == 5 // IndirectX, IndirectY
-	{
-		Args := RemainingTokens
-
-		if Args[0].Type == token_type.LEFT_PAREN
-		{
-			if Args[1].Type == token_type.ADDRESS8
-			{
-				if Args[2].Type == token_type.COMMA // IndirectX
-				{
-					if Args[3].Type == token_type.X
-					{
-						if Args[4].Type == token_type.RIGHT_PAREN
-						{
-							if Opcode.IndirectX == 0
-							{
-								ReportError(CurrentLine, "This instruction does not support IndirectX")
-							}
-						}
-						else
-						{
-							ReportError(CurrentLine, "Invalid argument")
-						}
-					}
-					else
-					{
-						ReportError(CurrentLine, "Invalid argument")
-					}
-				}
-				else if Args[2].Type == token_type.RIGHT_PAREN // IndirectY
-				{
-					if Args[3].Type == token_type.COMMA
-					{
-						if Args[4].Type == token_type.Y
-						{
-							if Opcode.IndirectY == 0
-							{
-								ReportError(CurrentLine, "This instruction does not support IndirectY")
-							}
-						}
-						else
-						{
-							ReportError(CurrentLine, "Invalid argument")
-						}
-					}
-					else
-					{
-						ReportError(CurrentLine, "Invalid argument")
-					}
-				}
-				else
-				{
-					ReportError(CurrentLine, "Invalid argument")
-				}
-			}
-			else
-			{
-				ReportError(CurrentLine, "Indirect addressing requires a 1 byte address")
-			}
-		}
-		else
-		{
-			ReportError(CurrentLine, "Invalid argument")
-		}
-	}
-	else
-	{
-		ReportError(CurrentLine, "Too many arguments")
 	}
 }
 
