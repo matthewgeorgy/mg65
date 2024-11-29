@@ -135,6 +135,16 @@ main :: proc()
 			win32.CloseHandle(hFile)
 			fmt.println("Code assembled successfully,", BytesWritten, "bytes to", OutputFileName) 
 		}
+		else
+		{
+			slice.sort_by(gErrors[:], SortErrors)
+			for Error in gErrors
+			{
+				fmt.printf("%s(%d)", strings.clone_to_cstring(InputFileName), Error.LineNumber)
+				fmt.printf(" Error: ")
+				fmt.printf("%s\n", strings.clone_to_cstring(Error.Message))
+			}
+		}
 	}
 }
 
@@ -222,32 +232,19 @@ PreprocessTokens :: proc(Tokens : []token)
 		return
 	}
 
-	for Token, Index in RemainingTokens
-	{
-		if Token.Type == token_type.IDENTIFIER
-		{
-			if !slice.contains(LabelNames[:], Token.Lexeme)
-			{
-				NewToken, Exists := DefineTable[Token.Lexeme]
-				if !Exists
-				{
-					ReportError(CurrentLine, strings.concatenate([]string{"Unknown symbol: ", Token.Lexeme}))
-					return
-				}
-				else
-				{
-					RemainingTokens[Index] = NewToken
-				}
-			}
-		}
-	}
-
 	if Opcode.Implicit != 0 || Instruction.Type == token_type.BRK
 	{
 		if TokenCount != 0
 		{
 			ReportError(CurrentLine, "Implicit instructions take 0 arguments.")
 		}
+		return
+	}
+
+
+	if Opcode.Implicit == 0 && TokenCount == 0
+	{
+		ReportError(CurrentLine, "This instruction does not support implicit mode")
 		return
 	}
 
@@ -315,10 +312,24 @@ PreprocessTokens :: proc(Tokens : []token)
 		return
 	}
 
-	if Opcode.Implicit == 0 && TokenCount == 0
+	for Token, Index in RemainingTokens
 	{
-		ReportError(CurrentLine, "This instruction does not support implicit mode")
-		return
+		if Token.Type == token_type.IDENTIFIER
+		{
+			if !slice.contains(LabelNames[:], Token.Lexeme)
+			{
+				NewToken, Exists := DefineTable[Token.Lexeme]
+				if !Exists
+				{
+					ReportError(CurrentLine, strings.concatenate([]string{"Unknown symbol: ", Token.Lexeme}))
+					return
+				}
+				else
+				{
+					RemainingTokens[Index] = NewToken
+				}
+			}
+		}
 	}
 
 	if TokenCount == 1 // Accumulator, Immediate, ZeroPage, Absolute
@@ -578,18 +589,18 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 	if Opcode.Branch != 0 || Instruction.Type == token_type.JMP || Instruction.Type == token_type.JSR
 	{
 		IsBranch := Opcode.Branch != 0
-		LabelName := Tokens[1].Lexeme
-		Reference := label_reference{Tokens[0].LineNumber, u16(File.Ptr + 1), IsBranch}
-
-		if !(LabelName in LabelReferences)
-		{
-			LabelReferences[LabelName] = {}
-		}
 
 		if IsBranch
 		{
 			File.Data[File.Ptr] = Opcode.Branch
 
+			LabelName := Tokens[1].Lexeme
+			Reference := label_reference{Tokens[0].LineNumber, u16(File.Ptr + 1), IsBranch}
+
+			if !(LabelName in LabelReferences)
+			{
+				LabelReferences[LabelName] = {}
+			}
 			append(&LabelReferences[LabelName], Reference)
 
 			File.Ptr += 2
@@ -609,6 +620,13 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 				}
 				else // Label
 				{
+					LabelName := Tokens[1].Lexeme
+					Reference := label_reference{Tokens[0].LineNumber, u16(File.Ptr + 1), IsBranch}
+
+					if !(LabelName in LabelReferences)
+					{
+						LabelReferences[LabelName] = {}
+					}
 					append(&LabelReferences[LabelName], Reference)
 				}
 			}
@@ -812,7 +830,7 @@ ResolveLabels :: proc(File : ^file)
 		{
 			for Ref in References
 			{
-				ReportError(Ref.LineNumber, strings.concatenate([]string{"Label:", Name, "was not resolved"}))
+				ReportError(Ref.LineNumber, strings.concatenate([]string{"Label '", Name, "' was not resolved"}))
 			}
 		}
 		else
