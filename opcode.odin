@@ -6,6 +6,7 @@ opcode :: struct
 {
 						// Token count
 	Implicit : u8, 		// 1: INT
+	Branch : u8,		// 2: INT Label
 	Accumulator : u8,	// 2: INT A
 	Immediate : u8, 	// 2: INT #$44
 	ZeroPage : u8, 		// 2: INT $44
@@ -29,14 +30,14 @@ InitializeOpcodeTable :: proc(Table : ^map[token_type]opcode)
 	Table[token_type.BIT] = opcode{ZeroPage = 0x24, Absolute = 0x2C}
 
 	// Branch instructions
-	Table[token_type.BPL] = opcode{Implicit = 0x10}
-	Table[token_type.BMI] = opcode{Implicit = 0x30}
-	Table[token_type.BVC] = opcode{Implicit = 0x50}
-	Table[token_type.BVS] = opcode{Implicit = 0x70}
-	Table[token_type.BCC] = opcode{Implicit = 0x90}
-	Table[token_type.BCS] = opcode{Implicit = 0xB0}
-	Table[token_type.BNE] = opcode{Implicit = 0xD0}
-	Table[token_type.BEQ] = opcode{Implicit = 0xF0}
+	Table[token_type.BPL] = opcode{Branch = 0x10}
+	Table[token_type.BMI] = opcode{Branch = 0x30}
+	Table[token_type.BVC] = opcode{Branch = 0x50}
+	Table[token_type.BVS] = opcode{Branch = 0x70}
+	Table[token_type.BCC] = opcode{Branch = 0x90}
+	Table[token_type.BCS] = opcode{Branch = 0xB0}
+	Table[token_type.BNE] = opcode{Branch = 0xD0}
+	Table[token_type.BEQ] = opcode{Branch = 0xF0}
 	Table[token_type.BRK] = opcode{Implicit = 0x00}
 
 	Table[token_type.CMP] = opcode{Immediate = 0xC9, ZeroPage = 0xC5, ZeroPageX = 0xD5, Absolute = 0xCD, AbsoluteX = 0xdd, AbsoluteY = 0xd9, IndirectX = 0xc1, IndirectY = 0xd1}

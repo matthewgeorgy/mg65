@@ -282,6 +282,8 @@ LexerDirective :: proc(Lexer : ^lexer) -> (Err : bool)
 	return
 }
 
+LabelNames : [dynamic]string
+
 LexerIdentifier :: proc(Lexer : ^lexer)
 {
 	for (LexerIsAlphaNumeric(LexerPeek(Lexer)))
@@ -289,14 +291,25 @@ LexerIdentifier :: proc(Lexer : ^lexer)
 		LexerAdvance(Lexer)
 	}
 
-	Text := Lexer.Source[Lexer.StartPos : Lexer.CurrentPos]
-	Type, Exists := Lexer.Keywords[Text]
-	if !Exists
+	if LexerPeek(Lexer) == ':' // Label
 	{
-		Type = token_type.IDENTIFIER
-	}
+		Name := Lexer.Source[Lexer.StartPos : Lexer.CurrentPos]
+		append(&LabelNames, Name)
 
-	LexerAddToken(Lexer, Type)
+		Type := token_type.LABEL
+		LexerAddToken(Lexer, Type)
+		LexerAdvance(Lexer)
+	}
+	else // Identifier
+	{
+		Text := Lexer.Source[Lexer.StartPos : Lexer.CurrentPos]
+		Type, Exists := Lexer.Keywords[Text]
+		if !Exists
+		{
+			Type = token_type.IDENTIFIER
+		}
+		LexerAddToken(Lexer, Type)
+	}
 }
 
 LexerInitializeKeywordTable :: proc(Lexer : ^lexer)
@@ -427,5 +440,4 @@ LexerInitializeKeywordTable :: proc(Lexer : ^lexer)
 	Lexer.Keywords["word"] = token_type.WORD
 	Lexer.Keywords["define"] = token_type.DEFINE
 }
-
 

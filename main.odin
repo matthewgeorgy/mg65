@@ -33,6 +33,12 @@ StringFile :: proc(FileName : string) -> [dynamic]string
 
 DefineTable : map[string]token
 
+label :: struct
+{
+	Refs : []uint,
+	Address : uint,
+}
+
 main :: proc()
 {
 	Args := os.args
@@ -49,8 +55,6 @@ main :: proc()
 		OutputFileName = strings.concatenate([]string{OutputFileName, string(".o")})
 
 		OutputFileNameW = win32.utf8_to_wstring(OutputFileName)
-
-		fmt.println(OutputFileName)
 	}
 	else
 	{
@@ -81,12 +85,13 @@ main :: proc()
 		append(&TokenSet[Token.LineNumber], Token)
 	}
 
-	// Validate tokens in order
+	// Preprocess tokens in order
+	fmt.println("Preprocessing...")
 	for LineNumber in LineNumbers
 	{
 		Tokens := TokenSet[LineNumber]
 		// fmt.println(LineNumber, Tokens)
-		ValidateTokens(Tokens[:])
+		PreprocessTokens(Tokens[:])
 	}
 
 	// Report errors
@@ -98,12 +103,15 @@ main :: proc()
 		fmt.printf("%s\n", strings.clone_to_cstring(Error.Message))
 	}
 
-	// fmt.println(DefineTable)
+	LabelReferences = make(map[string][dynamic]label_reference)
+	LabelAddresses = make(map[string]uint)
 
 	// Generate code
+	File : file
+
 	if len(gErrors) == 0
 	{
-		File : file
+		fmt.println("Generating code...")
 		File.Data = make([]u8, 64000)
 
 		for LineNumber in LineNumbers
@@ -112,19 +120,26 @@ main :: proc()
 			GenerateCode(Tokens[:], &File)
 		}
 
-		hFile : win32.HANDLE
-		BytesWritten : win32.DWORD
+		fmt.println("Found", len(LabelReferences), "label(s)")
+		fmt.println("Resolving labels...")
+		ResolveLabels(&File)
 
-		hFile = win32.CreateFileW(OutputFileNameW, win32.GENERIC_WRITE, 0, nil, win32.CREATE_ALWAYS, win32.FILE_ATTRIBUTE_NORMAL, nil)
-		win32.WriteFile(hFile, rawptr(&File.Data[0]), u32(File.Ptr), &BytesWritten, nil)
-		win32.CloseHandle(hFile)
+		// Resolve labels
+		if len(gErrors) == 0
+		{
+			hFile : win32.HANDLE
+			BytesWritten : win32.DWORD
 
-		fmt.println("Wrote", BytesWritten, "bytes to", OutputFileName)
+			hFile = win32.CreateFileW(OutputFileNameW, win32.GENERIC_WRITE, 0, nil, win32.CREATE_ALWAYS, win32.FILE_ATTRIBUTE_NORMAL, nil)
+			win32.WriteFile(hFile, rawptr(&File.Data[0]), u32(File.Ptr), &BytesWritten, nil)
+			win32.CloseHandle(hFile)
+			fmt.println("Code assembled successfully,", BytesWritten, "bytes to", OutputFileName) 
+		}
 	}
 }
 
 // TODO(matthew): this needs a LOT of tidying up...
-ValidateTokens :: proc(Tokens : []token)
+PreprocessTokens :: proc(Tokens : []token)
 {
 	Opcode : opcode
 	CurrentLine := Tokens[0].LineNumber
@@ -185,6 +200,10 @@ ValidateTokens :: proc(Tokens : []token)
 
 		return
 	}
+	else if Instruction.Type == token_type.LABEL
+	{
+		return
+	}
 	else
 	{
 		ReportError(CurrentLine, "Code must start with an instruction or directive")
@@ -198,15 +217,18 @@ ValidateTokens :: proc(Tokens : []token)
 	{
 		if Token.Type == token_type.IDENTIFIER
 		{
-			NewToken, Exists := DefineTable[Token.Lexeme]
-			if !Exists
+			if !slice.contains(LabelNames[:], Token.Lexeme)
 			{
-				ReportError(CurrentLine, strings.concatenate([]string{"Unknown symbol", Token.Lexeme}))
-				return
-			}
-			else
-			{
-				RemainingTokens[Index] = NewToken
+				NewToken, Exists := DefineTable[Token.Lexeme]
+				if !Exists
+				{
+					ReportError(CurrentLine, strings.concatenate([]string{"Unknown symbol: ", Token.Lexeme}))
+					return
+				}
+				else
+				{
+					RemainingTokens[Index] = NewToken
+				}
 			}
 		}
 	}
@@ -221,6 +243,24 @@ ValidateTokens :: proc(Tokens : []token)
 		if TokenCount != 0
 		{
 			ReportError(CurrentLine, "Implicit instructions take 0 arguments.")
+		}
+		return
+	}
+
+	if Opcode.Branch != 0
+	{
+		if TokenCount == 1
+		{
+			Arg := RemainingTokens[0]
+			IsLabel := slice.contains(LabelNames[:], Arg.Lexeme)
+			if !IsLabel
+			{
+				ReportError(CurrentLine, "Argument is not a label")
+			}
+		}
+		else // NOTE: if TokenCount == 0 (need other cases)
+		{
+			ReportError(CurrentLine, "Branch instruction requires a label to jump to")
 		}
 		return
 	}
@@ -429,6 +469,15 @@ ValidateTokens :: proc(Tokens : []token)
 	}
 }
 
+label_reference :: struct
+{
+	LineNumber : int,
+	Address : u16,
+}
+
+LabelReferences : map[string][dynamic]label_reference
+LabelAddresses : map[string]uint
+
 GenerateCode :: proc(Tokens : []token, File : ^file)
 {
 	Opcode : opcode
@@ -455,6 +504,15 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 		return
 	}
 
+	if Instruction.Type == token_type.LABEL
+	{
+		LabelName := Instruction.Lexeme
+
+		LabelAddresses[LabelName] = File.Ptr
+		fmt.println(LabelName, File.Ptr)
+		return
+	}
+
 	Opcode = gOpcodeTable[Instruction.Type]
 
 	if Opcode.Implicit != 0 || Instruction.Type == token_type.BRK
@@ -462,6 +520,22 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 		File.Data[File.Ptr] = Opcode.Implicit
 
 		File.Ptr += 1
+		return
+	}
+
+	if Opcode.Branch != 0
+	{
+		File.Data[File.Ptr] = Opcode.Branch
+		LabelName := Tokens[1].Lexeme
+
+		if !(LabelName in LabelReferences)
+		{
+			LabelReferences[LabelName] = {}
+		}
+		Reference := label_reference{Tokens[0].LineNumber, u16(File.Ptr + 1)}
+		append(&LabelReferences[LabelName], Reference)
+
+		File.Ptr += 3
 		return
 	}
 
@@ -573,6 +647,30 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 			File.Ptr += 2
 
 			return
+		}
+	}
+}
+
+ResolveLabels :: proc(File : ^file)
+{
+	for Name, References in LabelReferences
+	{
+		if !(Name in LabelAddresses)
+		{
+			for Ref in References
+			{
+				ReportError(Ref.LineNumber, strings.concatenate([]string{"Label:", Name, "was not resolved"}))
+			}
+		}
+		else
+		{
+			ResolvedAddress := LabelAddresses[Name]
+
+			for Ref in References
+			{
+				File.Data[Ref.Address]     = u8(0x00FF & ResolvedAddress) // lo-byte
+				File.Data[Ref.Address + 1] = u8((0xFF00 & ResolvedAddress) >> 8) // hi-byte
+			}
 		}
 	}
 }
