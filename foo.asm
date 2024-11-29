@@ -1,8 +1,8 @@
-	LDX #$08
+  LDX #$08
+  BNE decrement
+  DEX
+  STX $0200
+  CPX #$03
 decrement:
-	DEX
-  	STX $0200
-  	CPX #$03
-  	BNE decrement
-  	; STX $0201
-  	; BRK
+  STX $0201
+  BRK

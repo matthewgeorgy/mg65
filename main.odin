@@ -143,8 +143,15 @@ PreprocessTokens :: proc(Tokens : []token)
 {
 	Opcode : opcode
 	CurrentLine := Tokens[0].LineNumber
-
 	Instruction := Tokens[0]
+	RemainingTokens := Tokens[1:]
+	TokenCount := len(RemainingTokens)
+	// TokenCount:
+	// 0 = Implicit
+	// 1 = Accumulator, Immediate, ZeroPage, Absolute
+	// 3 = ZeroPageX, ZeroPageY, AbsoluteX, AbsoluteY, Indirect
+	// 4 = IndirectX, IndirectY
+
 	if token_type.ADC <= Instruction.Type && Instruction.Type <= token_type.TYA
 	{
 		Opcode = gOpcodeTable[Instruction.Type]
@@ -202,6 +209,11 @@ PreprocessTokens :: proc(Tokens : []token)
 	}
 	else if Instruction.Type == token_type.LABEL
 	{
+		if TokenCount != 0
+		{
+			ReportError(CurrentLine, "Labels must exist on line by themselves")
+		}
+
 		return
 	}
 	else
@@ -209,9 +221,6 @@ PreprocessTokens :: proc(Tokens : []token)
 		ReportError(CurrentLine, "Code must start with an instruction or directive")
 		return
 	}
-
-	RemainingTokens := Tokens[1:]
-	TokenCount := len(RemainingTokens)
 
 	for Token, Index in RemainingTokens
 	{
@@ -233,11 +242,6 @@ PreprocessTokens :: proc(Tokens : []token)
 		}
 	}
 
-	// 0 = Implicit
-	// 1 = Accumulator, Immediate, ZeroPage, Absolute
-	// 3 = ZeroPageX, ZeroPageY, AbsoluteX, AbsoluteY, Indirect
-	// 4 = IndirectX, IndirectY
-
 	if Opcode.Implicit != 0 || Instruction.Type == token_type.BRK
 	{
 		if TokenCount != 0
@@ -247,20 +251,66 @@ PreprocessTokens :: proc(Tokens : []token)
 		return
 	}
 
-	if Opcode.Branch != 0
+	// Handle a jump or branch instruction separately
+	if Opcode.Branch != 0 || Instruction.Type == token_type.JMP || Instruction.Type == token_type.JSR
 	{
-		if TokenCount == 1
+		if Opcode.Branch != 0 // Branch
 		{
-			Arg := RemainingTokens[0]
-			IsLabel := slice.contains(LabelNames[:], Arg.Lexeme)
-			if !IsLabel
+			if TokenCount == 1
 			{
-				ReportError(CurrentLine, "Argument is not a label")
+				Arg := RemainingTokens[0]
+
+				if Arg.Type != token_type.IDENTIFIER
+				{
+					ReportError(CurrentLine, "Branch argument must be an identifier (label)")
+				}
+			}
+			else // NOTE: if TokenCount == 0 (need other cases)
+			{
+				ReportError(CurrentLine, "Branch instruction requires a label to jump to")
 			}
 		}
-		else // NOTE: if TokenCount == 0 (need other cases)
+		else // Jump
 		{
-			ReportError(CurrentLine, "Branch instruction requires a label to jump to")
+			if TokenCount == 1
+			{
+				Arg := RemainingTokens[0]
+
+				if Arg.Type != token_type.ADDRESS16 || Arg.Type != token_type.IDENTIFIER
+				{
+					ReportError(CurrentLine, "Instruction must take an absolute address or label")
+				}
+			}
+			else if TokenCount == 3
+			{
+				Args := RemainingTokens
+
+				if Args[0].Type == token_type.LEFT_PAREN
+				{
+					if Args[1].Type == token_type.ADDRESS16
+					{
+						if Args[2].Type == token_type.ADDRESS16
+						{
+							if Opcode.Indirect == 0
+							{
+								ReportError(CurrentLine, "This instruction does not support indirect mode")
+							}
+						}
+						else
+						{
+							ReportError(CurrentLine, "Invalid syntax")
+						}
+					}
+					else
+					{
+						ReportError(CurrentLine, "Invalid syntax")
+					}
+				}
+				else
+				{
+					ReportError(CurrentLine, "Invalid syntax")
+				}
+			}
 		}
 		return
 	}
@@ -473,6 +523,7 @@ label_reference :: struct
 {
 	LineNumber : int,
 	Address : u16,
+	IsBranch : bool // true = Branch, false = Jump
 }
 
 LabelReferences : map[string][dynamic]label_reference
@@ -482,8 +533,8 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 {
 	Opcode : opcode
 	CurrentLine := Tokens[0].LineNumber
-
 	Instruction := Tokens[0]
+	TokenCount := len(Tokens[1:])
 
 	if Instruction.Type == token_type.BYTE || Instruction.Type == token_type.WORD
 	{
@@ -523,23 +574,58 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 		return
 	}
 
-	if Opcode.Branch != 0
+	// Branch or jump instructions
+	if Opcode.Branch != 0 || Instruction.Type == token_type.JMP || Instruction.Type == token_type.JSR
 	{
-		File.Data[File.Ptr] = Opcode.Branch
+		IsBranch := Opcode.Branch != 0
 		LabelName := Tokens[1].Lexeme
+		Reference := label_reference{Tokens[0].LineNumber, u16(File.Ptr + 1), IsBranch}
 
 		if !(LabelName in LabelReferences)
 		{
 			LabelReferences[LabelName] = {}
 		}
-		Reference := label_reference{Tokens[0].LineNumber, u16(File.Ptr + 1)}
-		append(&LabelReferences[LabelName], Reference)
 
-		File.Ptr += 3
+		if IsBranch
+		{
+			File.Data[File.Ptr] = Opcode.Branch
+
+			append(&LabelReferences[LabelName], Reference)
+
+			File.Ptr += 2
+		}
+		else
+		{
+			if TokenCount == 1 // Absolute
+			{
+				Arg := Tokens[1]
+
+				File.Data[File.Ptr] = Opcode.Absolute
+
+				if Arg.Type == token_type.ADDRESS16
+				{
+					File.Data[File.Ptr + 1] = u8(0x00FF & Arg.Literal.(u16)) // lo-byte
+					File.Data[File.Ptr + 2] = u8((0xFF00 & Arg.Literal.(u16)) >> 8) // hi-byte
+				}
+				else // Label
+				{
+					append(&LabelReferences[LabelName], Reference)
+				}
+			}
+			else // Indirect
+			{
+				Arg := Tokens[2]
+
+				File.Data[File.Ptr] = Opcode.Indirect
+				File.Data[File.Ptr + 1] = u8(0x00FF & Arg.Literal.(u16)) // lo-byte
+				File.Data[File.Ptr + 2] = u8((0xFF00 & Arg.Literal.(u16)) >> 8) // hi-byte
+			}
+
+			File.Ptr += 3
+		}
+
 		return
 	}
-
-	TokenCount := len(Tokens[1:])
 
 	if TokenCount == 1
 	{
@@ -651,6 +737,73 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 	}
 }
 
+PreprocessJumpBranch :: proc(Tokens : []token)
+{
+	CurrentLine := Tokens[0].LineNumber
+	Opcode := gOpcodeTable[Tokens[0].Type]
+	RemainingTokens := Tokens[1:]
+	TokenCount := len(RemainingTokens)
+
+	if Opcode.Branch != 0 // Branch
+	{
+		if TokenCount == 1
+		{
+			Arg := RemainingTokens[0]
+
+			if Arg.Type != token_type.IDENTIFIER
+			{
+				ReportError(CurrentLine, "Branch argument must be an identifier (label)")
+			}
+		}
+		else // NOTE: if TokenCount == 0 (need other cases)
+		{
+			ReportError(CurrentLine, "Branch instruction requires a label to jump to")
+		}
+	}
+	else // Jump
+	{
+		if TokenCount == 1
+		{
+			Arg := RemainingTokens[0]
+
+			if Arg.Type != token_type.ADDRESS16 || Arg.Type != token_type.IDENTIFIER
+			{
+				ReportError(CurrentLine, "Instruction must take an absolute address or label")
+			}
+		}
+		else if TokenCount == 3
+		{
+			Args := RemainingTokens
+
+			if Args[0].Type == token_type.LEFT_PAREN
+			{
+				if Args[1].Type == token_type.ADDRESS16
+				{
+					if Args[2].Type == token_type.ADDRESS16
+					{
+						if Opcode.Indirect == 0
+						{
+							ReportError(CurrentLine, "This instruction does not support indirect mode")
+						}
+					}
+					else
+					{
+						ReportError(CurrentLine, "Invalid syntax")
+					}
+				}
+				else
+				{
+					ReportError(CurrentLine, "Invalid syntax")
+				}
+			}
+			else
+			{
+				ReportError(CurrentLine, "Invalid syntax")
+			}
+		}
+	}
+}
+
 ResolveLabels :: proc(File : ^file)
 {
 	for Name, References in LabelReferences
@@ -668,8 +821,29 @@ ResolveLabels :: proc(File : ^file)
 
 			for Ref in References
 			{
-				File.Data[Ref.Address]     = u8(0x00FF & ResolvedAddress) // lo-byte
-				File.Data[Ref.Address + 1] = u8((0xFF00 & ResolvedAddress) >> 8) // hi-byte
+				if Ref.IsBranch
+				{
+					AddressDiff : int = int(Ref.Address) - int(ResolvedAddress)
+					JumpOffset : u8
+
+					if AddressDiff > 0 // Jump backwards
+					{
+						JumpOffset = 0xFF - u8(AddressDiff)
+						fmt.println("backwards")
+					}
+					else // Jump forwards
+					{
+						JumpOffset = u8(-AddressDiff) - 1
+						fmt.println("forwards")
+					}
+
+					File.Data[Ref.Address] = JumpOffset
+				}
+				else
+				{
+					File.Data[Ref.Address]     = u8(0x00FF & ResolvedAddress) // lo-byte
+					File.Data[Ref.Address + 1] = u8((0xFF00 & ResolvedAddress) >> 8) // hi-byte
+				}
 			}
 		}
 	}

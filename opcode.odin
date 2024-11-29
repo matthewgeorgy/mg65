@@ -40,6 +40,10 @@ InitializeOpcodeTable :: proc(Table : ^map[token_type]opcode)
 	Table[token_type.BEQ] = opcode{Branch = 0xF0}
 	Table[token_type.BRK] = opcode{Implicit = 0x00}
 
+	// Jump instructions
+	Table[token_type.JMP] = opcode{Absolute = 0x4c, Indirect = 0x6c}
+	Table[token_type.JSR] = opcode{Absolute = 0x20}
+
 	Table[token_type.CMP] = opcode{Immediate = 0xC9, ZeroPage = 0xC5, ZeroPageX = 0xD5, Absolute = 0xCD, AbsoluteX = 0xdd, AbsoluteY = 0xd9, IndirectX = 0xc1, IndirectY = 0xd1}
 	Table[token_type.CPX] = opcode{Immediate = 0xe0, ZeroPage = 0xe4, Absolute = 0xec}
 	Table[token_type.CPY] = opcode{Immediate = 0xc0, ZeroPage = 0xc4, Absolute = 0xcc}
@@ -56,8 +60,6 @@ InitializeOpcodeTable :: proc(Table : ^map[token_type]opcode)
 	Table[token_type.SED] = opcode{Implicit = 0xF8}	
 
 	Table[token_type.INC] = opcode{ZeroPage = 0xe6, ZeroPageX = 0xf6, Absolute = 0xee, AbsoluteX = 0xfe}
-	Table[token_type.JMP] = opcode{Absolute = 0x4c, Indirect = 0x6c}
-	Table[token_type.JSR] = opcode{Absolute = 0x20}
 	Table[token_type.LDA] = opcode{Immediate = 0xa9, ZeroPage = 0xa5, ZeroPageX = 0xb5, Absolute = 0xad, AbsoluteX = 0xbd, AbsoluteY = 0xb9, IndirectX = 0xa1, IndirectY = 0xb1}
 	Table[token_type.LDX] = opcode{Immediate = 0xa2, ZeroPage = 0xa6, ZeroPageY = 0xb6, Absolute = 0xae, AbsoluteY = 0xbe}
 	Table[token_type.LDY] = opcode{Immediate = 0xa0, ZeroPage = 0xa4, ZeroPageX = 0xb4, Absolute = 0xac, AbsoluteX = 0xbc}
@@ -93,5 +95,4 @@ InitializeOpcodeTable :: proc(Table : ^map[token_type]opcode)
 	Table[token_type.STX] = opcode{ZeroPage = 0x86, ZeroPageY = 0x96, Absolute = 0x8e}
 	Table[token_type.STY] = opcode{ZeroPage = 0x84, ZeroPageX = 0x94, Absolute = 0x8c}
 }
-
 
