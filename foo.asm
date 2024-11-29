@@ -1,4 +1,4 @@
-branch:
+; branch:
   LDX #$08
   BNE decrement
   DEX

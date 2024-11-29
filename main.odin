@@ -5,6 +5,7 @@ import os		"core:os"
 import strings	"core:strings"
 import slice	"core:slice"
 import win32	"core:sys/windows"
+import ansi		"core:encoding/ansi"
 
 file :: struct
 {
@@ -99,8 +100,8 @@ main :: proc()
 	for Error in gErrors
 	{
 		fmt.printf("%s(%d)", strings.clone_to_cstring(InputFileName), Error.LineNumber)
-		fmt.printf(" Error: ")
-		fmt.printf("%s\n", strings.clone_to_cstring(Error.Message))
+		fmt.print(ansi.CSI + ansi.FG_RED + ansi.SGR + string(" Error: ") + ansi.CSI + ansi.RESET + ansi.SGR)
+		fmt.print(strings.clone_to_cstring(Error.Message), "\n")
 	}
 
 	LabelReferences = make(map[string][dynamic]label_reference)
@@ -141,8 +142,8 @@ main :: proc()
 			for Error in gErrors
 			{
 				fmt.printf("%s(%d)", strings.clone_to_cstring(InputFileName), Error.LineNumber)
-				fmt.printf(" Error: ")
-				fmt.printf("%s\n", strings.clone_to_cstring(Error.Message))
+				fmt.print(ansi.CSI + ansi.FG_RED + ansi.SGR + string(" Error: ") + ansi.CSI + ansi.RESET + ansi.SGR)
+				fmt.print(strings.clone_to_cstring(Error.Message), "\n")
 			}
 		}
 	}
