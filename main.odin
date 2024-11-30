@@ -797,20 +797,27 @@ ResolveLabels :: proc(File : ^file)
 			{
 				if Ref.IsBranch
 				{
-					// TODO(matthew): make sure that the address is reachable! report error otherwise
 					AddressDiff : int = int(Ref.Address) - int(ResolvedAddress)
 					JumpOffset : u8
 
-					if AddressDiff > 0 // Jump backwards
+					// Make sure address is reachable
+					if AddressDiff > 127 || AddressDiff < -128
 					{
-						JumpOffset = 0xFF - u8(AddressDiff)
+						ReportError(Ref.LineNumber, "Out of range branch (branches are limited to -128 to +127 bytes)")
 					}
-					else // Jump forwards
+					else
 					{
-						JumpOffset = u8(-AddressDiff) - 1
-					}
+						if AddressDiff > 0 // Jump backwards
+						{
+							JumpOffset = 0xFF - u8(AddressDiff)
+						}
+						else // Jump forwards
+						{
+							JumpOffset = u8(-AddressDiff) - 1
+						}
 
-					File.Data[Ref.Address] = JumpOffset
+						File.Data[Ref.Address] = JumpOffset
+					}
 				}
 				else
 				{
