@@ -468,53 +468,7 @@ PreprocessTokens :: proc(Tokens : []token)
 	}
 	else if token_type.BYTE <= Instruction.Type && Instruction.Type <= token_type.DEFINE
 	{
-		// TODO(matthew): this needs bulletproofing!!!
-		if len(Tokens[1:]) == 1
-		{
-			Constant := Tokens[1]
-
-			if Instruction.Type == token_type.BYTE
-			{
-				if Constant.Type != token_type.NUMBER8
-				{
-					ReportError(CurrentLine, ".BYTE directive must take a byte constant")
-				}
-			}
-			else // Instruction.Type == token_type.WORD
-			{
-				if Constant.Type != token_type.NUMBER16
-				{
-					ReportError(CurrentLine, ".WORD directive must take a word constant")
-				}
-			}
-		}
-		else if len(Tokens[1:]) == 2
-		{
-			Name := Tokens[1]
-			Value := Tokens[2]
-
-			if Name.Type == token_type.IDENTIFIER
-			{
-				if (Value.Type == token_type.ADDRESS8) ||
-				   (Value.Type == token_type.ADDRESS16) ||
-				   (Value.Type == token_type.NUMBER8)
-			   {
-				   DefineTable[Name.Lexeme] = Value
-			   }
-			   else
-			   {
-				   ReportError(CurrentLine, "Must be an 8bit or 16bit address OR an 8bit constant")
-			   }
-			}
-			else
-			{
-				ReportError(CurrentLine, "Define symbol must be an identifier")
-			}
-		}
-		else
-		{
-			ReportError(CurrentLine, "Wrong number of arguments for a directive")
-		}
+		PreprocessDirective(Tokens)
 	}
 	else if Instruction.Type == token_type.LABEL
 	{
@@ -570,17 +524,31 @@ GenerateCode :: proc(Tokens : []token, File : ^file)
 	Instruction := Tokens[0]
 	TokenCount := len(Tokens[1:])
 
-	if Instruction.Type == token_type.BYTE || Instruction.Type == token_type.WORD
+	if Instruction.Type == token_type.BYTE
 	{
-		Constant := Tokens[1]
+		Params := Tokens[1:]
+		ParamCount := len(Params)
 
-		if Instruction.Type == token_type.BYTE
+		for Index := 0; Index < ParamCount; Index += 2
 		{
+			Constant := Params[Index]
+
 			File.Data[File.Ptr] = Constant.Literal.(u8)
 			File.Ptr += 1
 		}
-		else
+
+		return
+	}
+
+	if Instruction.Type == token_type.WORD
+	{
+		Params := Tokens[1:]
+		ParamCount := len(Params)
+
+		for Index := 0; Index < ParamCount; Index += 2
 		{
+			Constant := Params[Index]
+
 			File.Data[File.Ptr]     = u8(0x00FF & Constant.Literal.(u16)) // lo-byte
 			File.Data[File.Ptr + 1] = u8((0xFF00 & Constant.Literal.(u16)) >> 8) // hi-byte
 			File.Ptr += 2
@@ -826,6 +794,106 @@ ResolveLabels :: proc(File : ^file)
 				}
 			}
 		}
+	}
+}
+
+PreprocessDirective :: proc(Tokens : []token)
+{
+	Params := Tokens[1:]
+	ParamCount := len(Params)
+	CurrentLine := Tokens[0].LineNumber
+
+	if Tokens[0].Type == token_type.BYTE
+	{
+		if ParamCount > 0
+		{
+			for Index := 0; Index < ParamCount; Index += 2
+			{
+				Tok := Params[Index]
+
+				if Tok.Type != token_type.NUMBER8
+				{
+					ReportError(CurrentLine, "Invalid syntax for multiple constants")
+				}
+			}
+
+			for Index := 1; Index < ParamCount; Index += 2
+			{
+				Tok := Params[Index]
+
+				if Tok.Type != token_type.COMMA
+				{
+					ReportError(CurrentLine, "Invalid syntax for multiple constants")
+				}
+			}
+		}
+		else
+		{
+			ReportError(CurrentLine, ".BYTE directive needs a constant")
+		}
+	}
+	else if Tokens[0].Type == token_type.WORD
+	{
+		if ParamCount > 0
+		{
+			for Index := 0; Index < ParamCount; Index += 2
+			{
+				Tok := Params[Index]
+
+				if Tok.Type != token_type.NUMBER16
+				{
+					ReportError(CurrentLine, "Invalid syntax for multiple constants")
+				}
+			}
+
+			for Index := 1; Index < ParamCount; Index += 2
+			{
+				Tok := Params[Index]
+
+				if Tok.Type != token_type.COMMA
+				{
+					ReportError(CurrentLine, "Invalid syntax for multiple constants")
+				}
+			}
+		}
+		else
+		{
+			ReportError(CurrentLine, ".WORD directive needs a constant")
+		}
+	}
+	else if Tokens[0].Type == token_type.DEFINE
+	{
+		if ParamCount == 2
+		{
+			Name := Tokens[1]
+			Value := Tokens[2]
+
+			if (Name.Type == token_type.IDENTIFIER)
+			{
+				if (Value.Type == token_type.ADDRESS8) ||
+				   (Value.Type == token_type.ADDRESS16) ||
+				   (Value.Type == token_type.NUMBER8)
+				{
+			   		DefineTable[Name.Lexeme] = Value
+				}
+				else
+				{
+					ReportError(CurrentLine, "Invalid value")
+				}
+			}
+			else
+			{
+				ReportError(CurrentLine, "Invalid symbol name") 
+			}
+		}
+		else
+		{
+			ReportError(CurrentLine, ".DEFINE has the format: .DEFINE SYMBOL VALUE") 
+		}
+	}
+	else
+	{
+		ReportError(CurrentLine, "Unrecgonized symbol")
 	}
 }
 
