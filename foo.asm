@@ -1,18 +1,18 @@
-  JSR init
-  JSR loop
-  JSR end
+.define c0 %00000001
+.define c1 %00000010
+.define c2 %00000100
+.define c3 %00001000
+.define c4 %00010000
+.define c5 %00100000
+.define c6 %01000000
+.define c7 %10000000
 
-init:
-  LDX #$00
-  RTS
-
-loop:
-  INX
-  CPX #$05
-  BNE loop
-  RTS
-
-end:
-  BRK
-init:
+.BYTE %00000001
+.BYTE %00000010
+.BYTE %00000100
+.BYTE %00001000
+.BYTE %00010000
+.BYTE %00100000
+.BYTE %01000000
+.BYTE %10000000
 

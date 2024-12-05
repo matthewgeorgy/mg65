@@ -68,6 +68,11 @@ LexerScanToken :: proc(Lexer : ^lexer) -> bool
 		case ' ' :
 		case '\t' :
 
+		case '%':
+		{
+			Err = LexerBinary(Lexer)
+		}
+
 		case '#':
 		{
 			Err = LexerNumber(Lexer)
@@ -210,6 +215,39 @@ LexerAddress :: proc(Lexer : ^lexer) -> (Err : bool)
 	{
 		ReportError(Lexer.CurrentLine, "An absolute address must be either 1 or 2 bytes long")
 		Err = true
+	}
+
+	return
+}
+
+LexerIsBin :: proc(C : u8) -> bool
+{
+	return C == '0' || C == '1'
+}
+
+LexerBinary :: proc(Lexer : ^lexer) -> (Err : bool)
+{
+	Err = false
+
+	DigitsCounted := 0
+	for LexerIsBin(LexerPeek(Lexer))
+	{
+		LexerAdvance(Lexer)
+		DigitsCounted += 1
+	}
+
+	if DigitsCounted == 8
+	{
+		Text := Lexer.Source[Lexer.StartPos : Lexer.CurrentPos]
+		StringValue := strings.clone_to_cstring(Text[1:])
+		Literal := u8(libc.strtol(StringValue, nil, 2))
+		Token := token{token_type.NUMBER8, Text, Literal, Lexer.CurrentLine}
+
+		append(&Lexer.Tokens, Token)
+	}
+	else
+	{
+		ReportError(Lexer.CurrentLine, "Binary constants must be 8 bits long")
 	}
 
 	return
